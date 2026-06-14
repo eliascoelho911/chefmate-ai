@@ -197,18 +197,6 @@ env/
 # FastAPI / Uvicorn
 *.pid
 
-# Frontend
-node_modules/
-dist/
-build/
-*.log
-.npm
-.vite
-.vscode/
-*.lock
-*.tsbuildinfo
-package-lock.json
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
