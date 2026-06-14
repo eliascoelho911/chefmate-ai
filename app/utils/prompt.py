@@ -1,6 +1,33 @@
 from typing import List, Dict
 import re
 
+def build_chat_messages(system_prompt: str, retrieved_chunks: list, chat_history: list) -> list:
+    """
+    Constrói uma lista de mensagens no formato da API Chat Completions (OpenRouter/OpenAI).
+    """
+    if retrieved_chunks:
+        context_block = "\n".join(f"Recipe {i+1}:\n{chunk}" for i, chunk in enumerate(retrieved_chunks))
+        context_message = f"[Context Retrieved from Knowledge Base]\n{context_block}\n"
+    else:
+        context_message = "[No context retrieved. Try to respond based on the chat history or ask the user for clarification.]\n"
+
+    system_content = (
+        f"{system_prompt}\n\n"
+        f"{context_message}\n"
+        f"Always format using proper Markdown. Keep answers concise and helpful. "
+        f"Strictly avoid responses stating: 'Based on the knowledge base', or similar phrases."
+    )
+
+    messages = [{"role": "system", "content": system_content}]
+
+    for msg in chat_history:
+        role = msg.get("role")
+        content = msg.get("content")
+        if role and content:
+            messages.append({"role": role, "content": content})
+
+    return messages
+
 def construct_prompt(system_prompt: str, retrieved_chunks: list, chat_history: list, latest_user_message: str) -> str:
     """
     Constructs a complete prompt for the language model by combining:

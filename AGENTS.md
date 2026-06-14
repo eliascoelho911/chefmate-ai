@@ -18,40 +18,49 @@ These files are gitignored and **must be created/downloaded manually** before th
      cleaned_data_csv: "data/processed/cleaned_recipes.csv"
      cleaned_data_pkl: "data/processed/cleaned_recipes.pkl"
      faiss_index_dir: "data/indexes"
-     model_path: "models/mistral-7b-instruct-v0.2.Q5_K_M.gguf"
    embedding:
      model_name: "all-MiniLM-L6-v2"
      batch_size: 128
+   openrouter:
+     api_key: "sk-or-v1-..."
+     model: "openai/gpt-5.4-mini"
    ```
-2. **GGUF model**: Download `mistral-7b-instruct-v0.2.Q5_K_M.gguf` from Hugging Face (TheBloke) and place at the path configured above.
-3. **Raw recipe CSV**: Download the Kaggle "Food Recipes Dataset" (`recipes.csv`) and place at `data/raw/recipes.csv` (or whatever `config.yml` specifies).
-
-## Running the App
-
-```bash
-# Install dependencies (heavy: torch, transformers, faiss-cpu, llama-cpp-python)
-pip install -r requirements.txt
-
-# Start the dev server (run from repo root)
-uvicorn main:app --reload
-```
-
-The server will fail on startup if `config.yml`, the cleaned recipe pickle, or the FAISS indexes are missing.
+2. **Raw recipe CSV**: Download from Kaggle and place at `data/raw/recipes.csv` (or whatever `config.yml` specifies).
+   - **Recommended dataset**: [Food.com Recipes and Reviews](https://www.kaggle.com/datasets/irkaal/foodcom-recipes-and-reviews/data?select=recipes.csv) (linked in README).
+   - The CSV **must contain** these columns (PascalCase; they are auto-converted to snake_case by the preprocessor):
+     - `Name`, `RecipeIngredientParts`, `RecipeInstructions`, `RecipeIngredientQuantities`
+     - `Keywords`, `DatePublished`, `ReviewCount`, `AggregatedRating`
+     - `CookTime`, `PrepTime`, `TotalTime`, `RecipeCategory`, `Calories`, `RecipeYield`, `Images`.
 
 ## Data Preparation Flow
 
-Data prep is exposed as a **runtime API endpoint**, not a standalone script:
+Data prep can be run in two ways:
+
+### Option A: Standalone script (recommended — avoids the chicken-and-egg problem)
 
 ```bash
-# After starting the server and placing the raw CSV
+# After placing the raw CSV in data/raw/recipes.csv
+python scripts/prepare_data.py
+```
+
+This script cleans the CSV, generates sentence-transformer embeddings, serializes a pickle, and builds three FAISS indexes (`ingredients_embedding`, `ingredients_with_quantities_embedding`, `title_embedding`). The resulting artifacts are written to `data/processed/` and `data/indexes/`.
+
+### Option B: Runtime API endpoint
+
+```bash
+# Start the server (only works if the pickle and indexes already exist)
+uvicorn main:app --reload
+
+# In another terminal:
 curl -X POST http://localhost:8000/data/initialize-recipes
 ```
 
-This endpoint cleans the CSV, generates sentence-transformer embeddings, serializes a pickle, and builds three FAISS indexes (`ingredients_embedding`, `ingredients_with_quantities_embedding`, `title_embedding`). The resulting artifacts are written to `data/processed/` and `data/indexes/`.
+**Note**: The server will fail on startup if `config.yml`, the cleaned recipe pickle, or the FAISS indexes are missing. Use Option A for first-time setup.
 
-## Known Code Quirk
+## Known Code Quirks
 
 - `app/api/data_preparation.py` line 2 imports from `backend.app.utils.recipe_preprocessor`. Because the repo root is the backend, this path is invalid. It should be `app.utils.recipe_preprocessor`. Hitting `/data/initialize-recipes` will raise an `ModuleNotFoundError` until this is fixed.
+- ~~The preprocessor (`app/utils/recipe_preprocessor.py`) does **not** create the `faiss_index` column required by `FAISSHandler.__init__` (`df.set_index("faiss_index")`).~~ **Fixed**: `clean_recipe_data()` now adds `df['faiss_index'] = df.index` at the end.
 
 ## Testing
 
@@ -71,13 +80,12 @@ This endpoint cleans the CSV, generates sentence-transformer embeddings, seriali
 3. Cleaned recipe DataFrame pickle
 4. FAISS indexes
 5. Intent detector
-6. Llama-cpp GGUF model
+6. OpenRouter API client (lightweight — no local model download)
 
 If any step fails, the app will not start.
 
 ## Environment Notes
 
 - Python 3.10+ required.
-- `n_threads=8` is hardcoded in `app/utils/llm_model.py`.
 - Prompt truncation is word-count based (`len(tokens) > context_length - 512`), not actual token count.
 - CORS is wide open (`allow_origins=["*"]`).

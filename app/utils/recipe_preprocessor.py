@@ -72,4 +72,7 @@ def clean_recipe_data(df: pd.DataFrame) -> pd.DataFrame:
     print("Final cleaned DataFrame:")
     print(df.head())
 
+    # Create faiss_index to align DataFrame rows with FAISS search results
+    df['faiss_index'] = df.index
+
     return df

@@ -6,7 +6,7 @@ import json
 
 from app.core.startup import GlobalState
 from app.utils.embedder import embed_text
-from app.utils.prompt import construct_prompt, generate_system_prompt
+from app.utils.prompt import construct_prompt, generate_system_prompt, build_chat_messages
 
 router = APIRouter()
 
@@ -36,20 +36,19 @@ def chat(request: ChatRequest):
             query_embedding, intent, top_k=3
         )
 
-        # Construct system and user prompts
+        # Construct chat messages for OpenRouter API
         system_prompt = generate_system_prompt(latest_user_message)
 
-        prompt = construct_prompt(
+        messages = build_chat_messages(
             system_prompt=system_prompt,
             retrieved_chunks=retrieved_recipes,
-            chat_history=request.chat_history,
-            latest_user_message=latest_user_message
+            chat_history=request.chat_history
         )
 
         # Stream tokens from LLM
         def token_generator():
             try:
-                for token in GlobalState.llm_runner.stream_response(prompt):
+                for token in GlobalState.llm_runner.stream_response(messages):
                     yield json.dumps({"type": "token", "content": token}) + "\n"
                 yield json.dumps({"type": "done"}) + "\n"
             except Exception as e:
