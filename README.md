@@ -256,16 +256,19 @@ The easiest way to run Chefmate AI in production or development is with Docker C
    docker-compose up --build
    ```
 
-   On the **first run**, the container will automatically:
-   - Download the dataset from Kaggle (if not present)
-   - Clean and preprocess the recipes
-   - Generate embeddings
-   - Build FAISS indexes
-   - Start the FastAPI server
+   The container expects data artifacts to already exist in the `data/` volume. If they are missing, the container will exit with an error.
 
-   Subsequent starts are instant because the `data/` directory is persisted in a Docker volume.
+4. **(First time only) Prepare data inside the container:**
+   If you haven't transferred pre-built artifacts, place `recipes.csv` in `data/raw/` and run:
+   ```bash
+   docker-compose exec chefmate python scripts/prepare_data.py
+   ```
+   Then restart the container:
+   ```bash
+   docker-compose restart
+   ```
 
-4. **Access the API:**
+5. **Access the API:**
    - API docs (Swagger UI): [http://localhost:8000/docs](http://localhost:8000/docs)
    - Health check: [http://localhost:8000/](http://localhost:8000/)
 

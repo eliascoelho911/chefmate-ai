@@ -45,7 +45,7 @@ These files are gitignored and **must be created/downloaded manually** before th
 
 Data prep can be run in two ways:
 
-### Option A: Standalone script (recommended — avoids the chicken-and-egg problem)
+### Option A: Standalone script (recommended)
 
 ```bash
 # After placing the raw CSV in data/raw/recipes.csv
@@ -54,17 +54,7 @@ python scripts/prepare_data.py
 
 This script cleans the CSV, generates sentence-transformer embeddings, serializes a pickle, and builds three FAISS indexes (`ingredients_embedding`, `ingredients_with_quantities_embedding`, `title_embedding`). The resulting artifacts are written to `data/processed/` and `data/indexes/`.
 
-### Option B: Runtime API endpoint
-
-```bash
-# Start the server (only works if the pickle and indexes already exist)
-uvicorn main:app --reload
-
-# In another terminal:
-curl -X POST http://localhost:8000/data/initialize-recipes
-```
-
-**Note**: The server will fail on startup if `config.yml`, the cleaned recipe pickle, or the FAISS indexes are missing. Use Option A for first-time setup.
+**Note:** The server will fail on startup if the cleaned recipe pickle or the FAISS indexes are missing. Data preparation must be run manually beforehand (or artifacts transferred into the container/volume).
 
 ## Known Code Quirks
 
@@ -99,11 +89,14 @@ The app is fully dockerized. See the `Dockerfile`, `docker-compose.yml`, and `en
 
 ### Key container behavior
 - The container runs as a non-root user (`appuser`, UID 1001).
-- On first boot, the `entrypoint.sh` checks for the cleaned recipe pickle and FAISS indexes.
-  - If missing, it automatically runs `python scripts/prepare_data.py` (downloads Kaggle dataset if needed, generates embeddings, builds indexes).
-  - If present, it skips directly to starting Uvicorn.
-- The `data/` directory is persisted via a named Docker volume (`chefmate_data`), so data preparation only runs once.
+- On boot, `entrypoint.sh` checks for the cleaned recipe pickle and FAISS indexes.
+  - If missing, the container **exits with an error** — it does NOT run data preparation automatically.
+  - If present, it starts Uvicorn immediately.
+- The `data/` directory is persisted via a named Docker volume (`chefmate_data`).
 - All configuration is injected through environment variables (`.env` file mounted by `docker-compose.yml`). The image does **not** contain any API keys or secrets.
+- To populate data inside the container, either:
+  1. Run `docker compose exec chefmate python scripts/prepare_data.py` after the first failed start (with raw CSV available), or
+  2. Transfer pre-built artifacts from your local machine into the volume (see README).
 
 ### Production constraints
 The `docker-compose.yml` enforces resource limits matching the target hardware:
