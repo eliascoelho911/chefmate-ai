@@ -49,10 +49,10 @@ Chefmate AI goes beyond static recipes; it understands ingredient substitutions,
 - Analyzes available ingredients and dietary preferences
 - Suggests recipes based on pantry inventory
 
-### Real-Time Local LLM Inference
-- Uses Mistral 7B in GGUF format for local, high-performance inference
-- Entire inference stack runs offline — no internet required
-- Ensures fast, private, and secure conversational flow
+### Remote LLM via OpenRouter
+- Uses OpenRouter API for high-quality conversational responses
+- Supports models like `openai/gpt-5.4-mini` and others
+- No local GPU or large model files required
 
 ### Vector-Based Semantic Search
 - Embeds both queries and recipes using MiniLM transformers
@@ -66,11 +66,6 @@ Chefmate AI goes beyond static recipes; it understands ingredient substitutions,
 
 ### Structured Recipe Output
 - JSON format includes: title, ingredient list, method, and optional tips
-
-### Zero External Dependencies
-- Fully offline and self-contained
-- No external API calls or cloud models
-- Perfect for embedded, air-gapped, or privacy-first applications
 
 ---
 
@@ -86,9 +81,9 @@ Chefmate AI goes beyond static recipes; it understands ingredient substitutions,
 
 ### LLM & Inference Engine
 
-- **Mistral 7B (GGUF)** – Lightweight yet powerful open-weight model used for chat response generation.
-- **llama.cpp** – Backend inference engine for running the quantized Mistral model locally on CPU/GPU.
-- **GGUF Format Loader** – Efficient model loading and quantized inference using compatible runtimes.
+- **OpenRouter API** – Unified gateway for accessing multiple LLM providers (OpenAI, Anthropic, and more).
+- **GPT-5.4-mini (via OpenRouter)** – Default model for fast, high-quality conversational responses.
+- No local model files or GPU required.
 
 ### NLP & Processing Pipeline
 
@@ -170,61 +165,34 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-#### c. Download and Set Up the LLM (GGUF Model)
+#### c. Configure Environment
 
-- Go to the Hugging Face page:
-[Mistral-7B-Instruct-v0.2-GGUF](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF)
+- Copy `.env.example` to `.env` and fill in your **OpenRouter API key**:
+  ```bash
+  cp .env.example .env
+  ```
 
-- Download this specific file:
+- The `.env` file controls all paths, model names, and API keys. No `config.yml` is required.
+
+#### d. Prepare Recipe Data and Indexes
+
+1. Download the raw recipe dataset from Kaggle: [Kaggle Food Recipes Dataset](https://www.kaggle.com/datasets/irkaal/foodcom-recipes-and-reviews/data?select=recipes.csv)
+
+2. Save the raw CSV in:
     ```bash
-    mistral-7b-instruct-v0.2.Q5_K_M.gguf
-    ```
-(Q5_K_M is recommended: low quality loss, 5.13 GB)
-
-- Save the file to:
-    ```bash
-    backend/models/mistral-7b-instruct-v0.2.Q5_K_M.gguf
-    ```
-
-#### d. Configure Environment
-
-- Create/edit `config.yml` (in the `backend/` directory) to set paths for:
-  - Model file (GGUF)
-  - Recipe data
-  - FAISS index directory
-  - Cleaned data files
-
-#### e. Prepare Recipe Data and Indexes
-
-- Ensure your raw recipe CSV is available at the path specified in your config (see `config.yml`).
-- Run the data preparation endpoint to clean, embed, and index recipes:
-
-```bash
-# Start the backend server (in one terminal)
-uvicorn main:app --reload
-
-# In another terminal, POST to the data preparation endpoint:
-curl -X POST http://localhost:8000/data/initialize-recipes
-```
-
-- Download the raw recipe dataset from Kaggle: [Kaggle Food Recipes Dataset](https://www.kaggle.com/datasets/irkaal/foodcom-recipes-and-reviews/data?select=recipes.csv)
-
-- Save the raw CSV in:
-    ```bash
-    backend/data/raw/recipes.csv
+    data/raw/recipes.csv
     ```
 
-- Preprocessed data and embeddings are stored in:
+3. Run the standalone data preparation script:
     ```bash
-    backend/data/processed/
+    python scripts/prepare_data.py
     ```
 
-- FAISS indexes for: Titles, Ingredients & Ingredients + Quantities are located in:
-    ```bash
-    backend/data/indexes/
-    ```
+    This cleans the CSV, generates embeddings, and builds FAISS indexes. The outputs are stored in:
+    - `data/processed/` (cleaned CSV and pickle)
+    - `data/indexes/` (FAISS indexes for titles, ingredients, and quantities)
 
-#### f. Run the Backend Server
+#### e. Run the Backend Server
     
 ```bash
 uvicorn main:app --reload
@@ -236,22 +204,103 @@ uvicorn main:app --reload
 
 ## Configuration
 
-Located at: `backend/config.yml`
+Configuration is handled entirely through **environment variables** (via a `.env` file or your shell).
 
-This file defines the paths to your data, model, and index files, as well as the settings for embedding generation.
+Copy `.env.example` to `.env` and customize as needed:
+
+```bash
+cp .env.example .env
+```
+
+### Key Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENROUTER_API_KEY` | *(required)* | Your OpenRouter API key |
+| `KAGGLE_USERNAME` / `KAGGLE_KEY` | *(optional)* | Kaggle credentials for automatic dataset download |
+| `EMBEDDING_MODEL_NAME` | `all-MiniLM-L6-v2` | Sentence-transformer model for embeddings |
+| `EMBEDDING_BATCH_SIZE` | `128` | Batch size for embedding generation |
+| `OPENROUTER_MODEL` | `openai/gpt-5.4-mini` | LLM model accessed via OpenRouter |
+
+All file paths (recipe data, processed data, FAISS indexes) can also be overridden via environment variables. See `.env.example` for the full list.
+
+> **Note:** A legacy `config.yml` is still supported for local development, but **`.env` is the preferred and recommended method** — especially for Docker deployments.
+
+---
+
+## Docker Deployment
+
+The easiest way to run Chefmate AI in production or development is with Docker Compose.
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+
+### Quick Start
+
+1. **Clone the repository and enter the project folder:**
+   ```bash
+   git clone https://github.com/ThakkarVidhi/chefmate-ai.git
+   cd chefmate-ai
+   ```
+
+2. **Create your environment file:**
+   ```bash
+   cp .env.example .env
+   # Edit .env and set at least OPENROUTER_API_KEY and KAGGLE credentials
+   ```
+
+3. **Build and start the container:**
+   ```bash
+   docker-compose up --build
+   ```
+
+   On the **first run**, the container will automatically:
+   - Download the dataset from Kaggle (if not present)
+   - Clean and preprocess the recipes
+   - Generate embeddings
+   - Build FAISS indexes
+   - Start the FastAPI server
+
+   Subsequent starts are instant because the `data/` directory is persisted in a Docker volume.
+
+4. **Access the API:**
+   - API docs (Swagger UI): [http://localhost:8000/docs](http://localhost:8000/docs)
+   - Health check: [http://localhost:8000/](http://localhost:8000/)
+
+### Useful Commands
+
+| Command | Description |
+|---------|-------------|
+| `docker-compose up --build` | Build image and start container |
+| `docker-compose up -d` | Start in detached (background) mode |
+| `docker-compose down` | Stop and remove container |
+| `docker-compose down -v` | Stop and **remove data volume** (wipe all indexes) |
+| `docker logs -f chefmate-ai` | View live logs |
+
+### Resource Limits
+
+The `docker-compose.yml` is pre-configured for a **1 CPU / 4 GB RAM** machine:
 
 ```yaml
-paths:
-  recipe_data: "data/raw/recipes.csv"                     # Raw recipe dataset from Kaggle
-  cleaned_data_csv: "data/processed/cleaned_recipes.csv"  # Cleaned CSV after preprocessing
-  cleaned_data_pkl: "data/processed/cleaned_recipes.pkl"  # Serialized data for fast loading
-  faiss_index_dir: "data/indexes"                         # Directory containing FAISS indexes
-  model_path: "models/mistral-7b-instruct-v0.2.Q5_K_M.gguf"  # Path to the downloaded GGUF model
-
-embedding:
-  model_name: "all-MiniLM-L6-v2"    # Sentence-transformers model used for recipe embeddings
-  batch_size: 128                   # Batch size for embedding generation
+deploy:
+  resources:
+    limits:
+      cpus: "1.0"
+      memory: 4G
+    reservations:
+      cpus: "0.5"
+      memory: 2G
 ```
+
+Adjust these values in `docker-compose.yml` if your host has different specs.
+
+### Security Notes
+
+- The container runs as a **non-root user** (`appuser`, UID 1001).
+- The `OPENROUTER_API_KEY` is injected via the `.env` file and is **never baked into the image**.
+- Kaggle credentials are also read from environment variables at runtime.
 
 ---
 
@@ -299,11 +348,8 @@ This project is licensed under the [MIT License](LICENSE).
 
 --
 
-**Q: The backend is not starting because of a missing model file. What should I do?**  
-**A:** You must manually download the mistral-7b-instruct-v0.2.Q5_K_M.gguf model file from Hugging Face:
-[https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF)
-
-Save the file to the `backend/models/` directory. Make sure the path in your `config.yml` is correctly set to point to this file.
+**Q: Do I still need `config.yml`?**  
+**A:** No. Configuration is now handled through environment variables (`.env` file). A legacy `config.yml` is still read if present, but all settings can be overridden via environment variables. For Docker deployments, `.env` is the only file you need.
 
 --
 

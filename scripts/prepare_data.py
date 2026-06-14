@@ -21,10 +21,13 @@ def download_raw_dataset(raw_path: str) -> None:
         print(f"[INFO] Raw recipe CSV already exists at: {raw_path}")
         return
 
-    if not os.environ.get("KAGGLE_API_TOKEN"):
-        print("[WARNING] KAGGLE_API_TOKEN environment variable is not set.")
-        print("          Set it before running this script, e.g.:")
+    if not (os.environ.get("KAGGLE_API_TOKEN") or (os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY"))):
+        print("[WARNING] No Kaggle credentials found.")
+        print("          Set one of the following before running this script:")
         print('          export KAGGLE_API_TOKEN="<your-token>"')
+        print("          OR")
+        print('          export KAGGLE_USERNAME="<your-username>"')
+        print('          export KAGGLE_KEY="<your-key>"')
         print("          Attempting download anyway (may use cached credentials)...")
 
     print("[INFO] Downloading dataset from Kaggle (irkaal/foodcom-recipes-and-reviews)...")

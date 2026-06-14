@@ -11,7 +11,15 @@
 
 These files are gitignored and **must be created/downloaded manually** before the app will start:
 
-1. **`config.yml`** at repo root (required for every module). Example:
+1. **`.env`** at repo root (preferred configuration method). Copy from `.env.example` and fill in at least:
+   ```bash
+   OPENROUTER_API_KEY=sk-or-v1-...
+   KAGGLE_USERNAME=your_kaggle_username
+   KAGGLE_KEY=your_kaggle_key
+   ```
+   All paths, model names, and hyperparameters can also be set via environment variables. See `.env.example` for the full list.
+
+2. **Legacy `config.yml`** (optional — still supported for local dev, but `.env` is recommended). Example:
    ```yaml
    paths:
      recipe_data: "data/raw/recipes.csv"
@@ -25,7 +33,8 @@ These files are gitignored and **must be created/downloaded manually** before th
      api_key: "sk-or-v1-..."
      model: "openai/gpt-5.4-mini"
    ```
-2. **Raw recipe CSV**: Download from Kaggle and place at `data/raw/recipes.csv` (or whatever `config.yml` specifies).
+
+3. **Raw recipe CSV**: Download from Kaggle and place at `data/raw/recipes.csv` (or override via `RECIPE_DATA` env var).
    - **Recommended dataset**: [Food.com Recipes and Reviews](https://www.kaggle.com/datasets/irkaal/foodcom-recipes-and-reviews/data?select=recipes.csv) (linked in README).
    - The CSV **must contain** these columns (PascalCase; they are auto-converted to snake_case by the preprocessor):
      - `Name`, `RecipeIngredientParts`, `RecipeInstructions`, `RecipeIngredientQuantities`
@@ -75,7 +84,7 @@ curl -X POST http://localhost:8000/data/initialize-recipes
 ## Startup Dependency Chain
 
 `main.py` -> `init_dependencies()` (in `app/core/startup.py`) eagerly loads, in order:
-1. `config.yml`
+1. Configuration (`.env` → legacy `config.yml`)
 2. SentenceTransformer model (`all-MiniLM-L6-v2`)
 3. Cleaned recipe DataFrame pickle
 4. FAISS indexes
@@ -83,6 +92,24 @@ curl -X POST http://localhost:8000/data/initialize-recipes
 6. OpenRouter API client (lightweight — no local model download)
 
 If any step fails, the app will not start.
+
+## Docker & Containerization
+
+The app is fully dockerized. See the `Dockerfile`, `docker-compose.yml`, and `entrypoint.sh` in the repo root.
+
+### Key container behavior
+- The container runs as a non-root user (`appuser`, UID 1001).
+- On first boot, the `entrypoint.sh` checks for the cleaned recipe pickle and FAISS indexes.
+  - If missing, it automatically runs `python scripts/prepare_data.py` (downloads Kaggle dataset if needed, generates embeddings, builds indexes).
+  - If present, it skips directly to starting Uvicorn.
+- The `data/` directory is persisted via a named Docker volume (`chefmate_data`), so data preparation only runs once.
+- All configuration is injected through environment variables (`.env` file mounted by `docker-compose.yml`). The image does **not** contain any API keys or secrets.
+
+### Production constraints
+The `docker-compose.yml` enforces resource limits matching the target hardware:
+- CPU limit: 1.0
+- Memory limit: 4G
+- Reservations: 0.5 CPU / 2G RAM
 
 ## Environment Notes
 
