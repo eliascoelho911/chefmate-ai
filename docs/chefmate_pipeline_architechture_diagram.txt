@@ -62,7 +62,7 @@
     │                                                                                 │
     │  📝 Text Preprocessing                 🔢 Vector Generation                      │
     │  ─────────────────────                ──────────────────                       │
-    │  • Tokenization                       • Model: all-MiniLM-L6-v2                │
+     │  • Tokenization                       • Model: paraphrase-multilingual-MiniLM  │
     │  • Normalization                      • Dimension: 384                         │
     │  • Stop word removal                  • Function: embed_text()                 │
     │  • Lemmatization                      • Output: numpy.ndarray                  │

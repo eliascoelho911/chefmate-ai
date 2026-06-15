@@ -19,7 +19,7 @@ def load_config(config_file: str = "config.yml") -> dict:
             "faiss_index_dir": os.getenv("FAISS_INDEX_DIR", "data/indexes"),
         },
         "embedding": {
-            "model_name": os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2"),
+            "model_name": os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
             "batch_size": int(os.getenv("EMBEDDING_BATCH_SIZE", "128")),
         },
         "openrouter": {

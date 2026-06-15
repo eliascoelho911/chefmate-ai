@@ -75,7 +75,7 @@ Chefmate AI goes beyond static recipes; it understands ingredient substitutions,
 - **FastAPI** *(high-performance API framework for routing and inference orchestration)*
 - **Uvicorn** *(ASGI server for high-speed FastAPI hosting)*
 - **FAISS** *(Facebook AI Similarity Search for efficient vector retrieval)*
-- **Sentence Transformers**: `all-MiniLM-L6-v2` *(for embedding user queries and recipe corpus)*
+- **Sentence Transformers**: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` *(for embedding user queries and recipe corpus; supports multilingual/cross-lingual search)*
 - **Prompt Construction Engine** *(Jinja2 templating or dynamic string formatting for building LLM prompts)*
 - **Custom Heuristic Engine** *(for intent detection from user message)*
 
@@ -218,7 +218,7 @@ cp .env.example .env
 |----------|---------|-------------|
 | `OPENROUTER_API_KEY` | *(required)* | Your OpenRouter API key |
 | `KAGGLE_USERNAME` / `KAGGLE_KEY` | *(optional)* | Kaggle credentials for automatic dataset download |
-| `EMBEDDING_MODEL_NAME` | `all-MiniLM-L6-v2` | Sentence-transformer model for embeddings |
+| `EMBEDDING_MODEL_NAME` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Sentence-transformer model for embeddings (multilingual) |
 | `EMBEDDING_BATCH_SIZE` | `128` | Batch size for embedding generation |
 | `OPENROUTER_MODEL` | `openai/gpt-5.4-mini` | LLM model accessed via OpenRouter |
 

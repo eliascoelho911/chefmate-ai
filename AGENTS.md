@@ -27,7 +27,7 @@ These files are gitignored and **must be created/downloaded manually** before th
      cleaned_data_pkl: "data/processed/cleaned_recipes.pkl"
      faiss_index_dir: "data/indexes"
    embedding:
-     model_name: "all-MiniLM-L6-v2"
+     model_name: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
      batch_size: 128
    openrouter:
      api_key: "sk-or-v1-..."
@@ -75,7 +75,7 @@ This script cleans the CSV, generates sentence-transformer embeddings, serialize
 
 `main.py` -> `init_dependencies()` (in `app/core/startup.py`) eagerly loads, in order:
 1. Configuration (`.env` → legacy `config.yml`)
-2. SentenceTransformer model (`all-MiniLM-L6-v2`)
+2. SentenceTransformer model (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`)
 3. Cleaned recipe DataFrame pickle
 4. FAISS indexes
 5. Intent detector

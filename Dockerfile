@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Pre-download the sentence-transformer model so runtime startup is fast
 # and so prepare_data.py works without internet in isolated environments
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
 
 # ==========================================
 # Stage 2: Production
