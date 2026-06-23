@@ -1,12 +1,12 @@
 import json
 from typing import Dict, List
 
-from fastapi import APIRouter, HTTPException
+import numpy as np
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.core.startup import GlobalState
-from app.utils.embedder import embed_text
+from app.core.container import AppContainer, get_container
 from app.utils.prompt import (
     build_chat_messages,
     construct_prompt,
@@ -21,7 +21,7 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/", response_class=StreamingResponse)
-def chat(request: ChatRequest):
+def chat(request: ChatRequest, container: AppContainer = Depends(get_container)):
     try:
         # Validate chat history
         if not request.chat_history:
@@ -39,11 +39,11 @@ def chat(request: ChatRequest):
         latest_user_message = latest_user_messages[-1]
 
         # Detect intent and get embedding
-        intent = GlobalState.intent_detector.detect_intent(latest_user_message)
-        query_embedding = embed_text(latest_user_message, GlobalState.embedding_model)
+        intent = container.intent_detector.detect(latest_user_message)
+        query_embedding = np.array(container.embedder.embed(latest_user_message))
 
         # Retrieve relevant recipes (documents/snippets) using FAISS
-        retrieved_recipes = GlobalState.faiss_handler.search_by_intent(
+        retrieved_recipes = container.faiss_handler.search_by_intent(
             query_embedding, intent, top_k=3
         )
 
@@ -59,7 +59,7 @@ def chat(request: ChatRequest):
         # Stream tokens from LLM
         def token_generator():
             try:
-                for token in GlobalState.llm_runner.stream_response(messages):
+                for token in container.llm_runner.stream_response(messages):
                     yield json.dumps({"type": "token", "content": token}) + "\n"
                 yield json.dumps({"type": "done"}) + "\n"
             except Exception as e:

@@ -1,6 +1,6 @@
 import logging
-from typing import Any
 
+from app.core.container import AppContainer, set_container
 from app.core.logging_config import setup_logging
 from app.utils.config_loader import load_config
 from app.utils.embedder import SentenceTransformerEmbedder, load_embedding_model
@@ -12,49 +12,42 @@ from app.utils.recipe_search import RecipeSearch
 from app.utils.sqlite_store import RecipeSQLiteStore
 
 
-class GlobalState:
-    config: Any = None
-    embedding_model: Any = None
-    sqlite_store: Any = None
-    faiss_handler: Any = None
-    intent_detector: Any = None
-    llm_runner: Any = None
-    recipe_search: Any = None
-
-
 def init_dependencies():
-    if GlobalState.config is None:
-        GlobalState.config = load_config()
-        setup_logging(GlobalState.config["logging"]["level"])
-        logging.info("Logging initialized")
+    """Build the AppContainer and expose it via get_container()."""
+    config = load_config()
+    setup_logging(config["logging"]["level"])
+    logging.info("Logging initialized")
 
-    if GlobalState.embedding_model is None:
-        GlobalState.embedding_model = load_embedding_model(GlobalState.config)
+    embedding_model = load_embedding_model(config)
 
-    if GlobalState.sqlite_store is None:
-        db_path = GlobalState.config["paths"]["sqlite_db"]
-        GlobalState.sqlite_store = RecipeSQLiteStore(db_path)
-        print(
-            f"[Startup] SQLite store loaded from {db_path} ({GlobalState.sqlite_store.count()} recipes)"
-        )
+    db_path = config["paths"]["sqlite_db"]
+    sqlite_store = RecipeSQLiteStore(db_path)
+    logging.info(
+        "SQLite store loaded from %s (%d recipes)", db_path, sqlite_store.count()
+    )
 
-    if GlobalState.faiss_handler is None:
-        GlobalState.faiss_handler = FAISSHandler(
-            GlobalState.config, GlobalState.sqlite_store
-        )
+    faiss_handler = FAISSHandler(config, sqlite_store)
 
-    if GlobalState.intent_detector is None:
-        GlobalState.intent_detector = IntentDetector()
+    intent_detector = IntentDetector()
 
-    if GlobalState.llm_runner is None:
-        GlobalState.llm_runner = LLMRunner()
+    llm_runner = LLMRunner()
 
-    if GlobalState.recipe_search is None:
-        embedder = SentenceTransformerEmbedder(GlobalState.embedding_model)
-        retriever = FAISSRecipeRetriever(GlobalState.faiss_handler)
-        GlobalState.recipe_search = RecipeSearch(
-            embedder=embedder,
-            intent_detector=GlobalState.intent_detector,
-            retriever=retriever,
-        )
-        print("[Startup] RecipeSearch initialized")
+    embedder = SentenceTransformerEmbedder(embedding_model)
+    retriever = FAISSRecipeRetriever(faiss_handler)
+    recipe_search = RecipeSearch(
+        embedder=embedder,
+        intent_detector=intent_detector,
+        retriever=retriever,
+    )
+    logging.info("RecipeSearch initialized")
+
+    container = AppContainer(
+        config=config,
+        recipe_search=recipe_search,
+        llm_runner=llm_runner,
+        intent_detector=intent_detector,
+        embedder=embedder,
+        faiss_handler=faiss_handler,
+    )
+    set_container(container)
+    logging.info("AppContainer initialized and set")

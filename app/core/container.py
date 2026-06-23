@@ -1,0 +1,45 @@
+from dataclasses import dataclass
+from typing import Optional
+
+from app.core.interfaces import Embedder
+from app.utils.recipe_search import RecipeSearch
+from app.utils.llm_model import LLMRunner
+from app.utils.intent_detector import IntentDetector
+from app.utils.faiss_handler import FAISSHandler
+
+
+@dataclass
+class AppContainer:
+    """
+    Concrete container holding all application dependencies.
+    Replaces the untyped GlobalState singleton with a typed, injectable seam.
+    """
+
+    config: dict
+    recipe_search: RecipeSearch
+    llm_runner: LLMRunner
+    intent_detector: IntentDetector
+    embedder: Embedder
+    faiss_handler: FAISSHandler
+
+
+# Module-level singleton. Set once at startup; read-only thereafter.
+_container: Optional[AppContainer] = None
+
+
+def set_container(container: AppContainer) -> None:
+    """Set the global application container. Called exactly once during startup."""
+    global _container
+    _container = container
+
+
+def get_container() -> AppContainer:
+    """
+    Return the application container for use with FastAPI Depends.
+    Raises RuntimeError if startup has not completed.
+    """
+    if _container is None:
+        raise RuntimeError(
+            "Container not initialized. Call init_dependencies() before handling requests."
+        )
+    return _container
