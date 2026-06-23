@@ -78,6 +78,10 @@ def clean_recipe_data(df: pd.DataFrame) -> pd.DataFrame:
     print("Final cleaned DataFrame:")
     print(df.head())
 
+    # Reset index to ensure sequential IDs (0, 1, 2...) after dropping rows.
+    # FAISS internal IDs are positional, so they must align with faiss_index.
+    df = df.reset_index(drop=True)
+
     # Create faiss_index to align DataFrame rows with FAISS search results
     df["faiss_index"] = df.index
 

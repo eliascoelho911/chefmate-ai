@@ -1,17 +1,24 @@
+import json
+from typing import Dict, List
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict
-import json
 
 from app.core.startup import GlobalState
 from app.utils.embedder import embed_text
-from app.utils.prompt import construct_prompt, generate_system_prompt, build_chat_messages
+from app.utils.prompt import (
+    build_chat_messages,
+    construct_prompt,
+    generate_system_prompt,
+)
 
 router = APIRouter()
 
+
 class ChatRequest(BaseModel):
     chat_history: List[Dict[str, str]]
+
 
 @router.post("/", response_class=StreamingResponse)
 def chat(request: ChatRequest):
@@ -21,9 +28,13 @@ def chat(request: ChatRequest):
             raise HTTPException(status_code=400, detail="Chat history cannot be empty")
 
         # Extract the most recent user message
-        latest_user_messages = [msg["content"] for msg in request.chat_history if msg["role"] == "user"]
+        latest_user_messages = [
+            msg["content"] for msg in request.chat_history if msg["role"] == "user"
+        ]
         if not latest_user_messages:
-            raise HTTPException(status_code=400, detail="No user message found in chat history")
+            raise HTTPException(
+                status_code=400, detail="No user message found in chat history"
+            )
 
         latest_user_message = latest_user_messages[-1]
 
@@ -42,7 +53,7 @@ def chat(request: ChatRequest):
         messages = build_chat_messages(
             system_prompt=system_prompt,
             retrieved_chunks=retrieved_recipes,
-            chat_history=request.chat_history
+            chat_history=request.chat_history,
         )
 
         # Stream tokens from LLM

@@ -1,15 +1,19 @@
+import logging
 import os
+
 import numpy as np
 import faiss
 
 from app.utils.sqlite_store import RecipeSQLiteStore
+
+logger = logging.getLogger(__name__)
 
 
 def build_recipe_faiss_indexes(df, config):
     columns_to_embed = {
         "ingredients_cleaned": "ingredients_embedding",
         "ingredients_with_quantities": "ingredients_with_quantities_embedding",
-        "name": "title_embedding"
+        "name": "title_embedding",
     }
 
     index_dir = config["paths"]["faiss_index_dir"]
@@ -18,17 +22,17 @@ def build_recipe_faiss_indexes(df, config):
     factory = config.get("faiss", {}).get("factory", "IVF4096,PQ48")
 
     for _, embed_col in columns_to_embed.items():
-        print(f"Building FAISS index for: {embed_col} (factory={factory})")
-        embeddings = np.array(df[embed_col].tolist()).astype('float32')
+        logger.info("Building FAISS index for: %s (factory=%s)", embed_col, factory)
+        embeddings = np.array(df[embed_col].tolist()).astype("float32")
         dim = embeddings.shape[1]
         n_vectors = embeddings.shape[0]
 
         if n_vectors < 50_000:
-            print(f"  Dataset small ({n_vectors}), falling back to IndexFlatL2")
+            logger.info("  Dataset small (%d), falling back to IndexFlatL2", n_vectors)
             index = faiss.IndexFlatL2(dim)
         else:
             index = faiss.index_factory(dim, factory)
-            print(f"  Training on {n_vectors} vectors...")
+            logger.info("  Training on %d vectors...", n_vectors)
             assert not index.is_trained
             index.train(embeddings)
             assert index.is_trained
@@ -37,7 +41,7 @@ def build_recipe_faiss_indexes(df, config):
 
         index_path = os.path.join(index_dir, f"{embed_col}.index")
         faiss.write_index(index, index_path)
-        print(f"  Saved FAISS index to: {index_path}")
+        logger.info("  Saved FAISS index to: %s", index_path)
 
 
 class FAISSHandler:
@@ -50,7 +54,7 @@ class FAISSHandler:
         self.embedding_columns = {
             "ingredients_cleaned": "ingredients_embedding",
             "ingredients_with_quantities": "ingredients_with_quantities_embedding",
-            "name": "title_embedding"
+            "name": "title_embedding",
         }
 
         self.indexes = {}
@@ -65,32 +69,38 @@ class FAISSHandler:
             # Set nprobe for IVF-based indexes
             if hasattr(index, "nprobe"):
                 index.nprobe = self.nprobe
-                print(f"  Loaded {embed_col} with nprobe={self.nprobe}")
+                logger.info("  Loaded %s with nprobe=%d", embed_col, self.nprobe)
             self.indexes[embed_col] = index
 
     def _get_metadata_by_index(self, idx: int, minimal: bool = False):
         """Returns recipe data by FAISS index with optional minimal output."""
         row = self.sqlite_store.get_recipe_by_faiss_index(idx)
         if row is None:
+            logger.debug("SQLite miss for faiss_index=%d", idx)
             return None
 
         if minimal:
             return {
                 "faiss_index": idx,
                 "name": row.get("name"),
-                "ingredients_with_quantities": row.get("ingredients_with_quantities", []),
+                "ingredients_with_quantities": row.get(
+                    "ingredients_with_quantities", []
+                ),
                 "recipe_instructions": row.get("recipe_instructions", []),
                 "category": row.get("recipe_category", ""),
                 "calories": row.get("calories", ""),
                 "total_time": row.get("total_time", ""),
                 "rating": row.get("aggregated_rating", None),
-                "images": row.get("images", [])
+                "images": row.get("images", []),
             }
         else:
             # Return full recipe without embedding columns
             return {"faiss_index": idx, **row}
 
-    def search_by_intent(self, query_embedding: np.ndarray, intent: str, top_k: int = 5):
+    def search_by_intent(
+        self, query_embedding: np.ndarray, intent: str, top_k: int = 5
+    ):
+        logger.debug("search_by_intent intent='%s' top_k=%d", intent, top_k)
         query_vector = np.array([query_embedding]).astype("float32")
 
         if intent == "ingredient_search":
@@ -100,6 +110,7 @@ class FAISSHandler:
         elif intent == "recipe_generation":
             target_key = "ingredients_with_quantities"
         else:
+            logger.debug("intent '%s' not mapped, using default_search", intent)
             return self.default_search(query_embedding, top_k)
 
         embed_col = self.embedding_columns[target_key]
@@ -109,6 +120,11 @@ class FAISSHandler:
             raise ValueError(f"No index for intent '{intent}'")
 
         distances, indices = index.search(query_vector, top_k)
+        logger.debug(
+            "distances=%s indices=%s",
+            distances[0].tolist(),
+            indices[0].tolist(),
+        )
         results = []
 
         for dist, idx in zip(distances[0], indices[0]):
@@ -118,15 +134,23 @@ class FAISSHandler:
             if metadata:
                 results.append((dist, metadata))
 
+        logger.debug("results count=%d", len(results))
         results = sorted(results, key=lambda x: x[0])
         return [r[1] for r in results[:top_k]]
 
     def default_search(self, query_embedding: np.ndarray, top_k: int = 5):
+        logger.debug("default_search top_k=%d", top_k)
         query_vector = np.array([query_embedding]).astype("float32")
 
         all_results = []
         for embed_col, index in self.indexes.items():
             distances, indices = index.search(query_vector, top_k)
+            logger.debug(
+                "index=%s distances=%s indices=%s",
+                embed_col,
+                distances[0].tolist(),
+                indices[0].tolist(),
+            )
             for dist, idx in zip(distances[0], indices[0]):
                 if idx == -1:
                     continue
@@ -134,6 +158,7 @@ class FAISSHandler:
                 if metadata:
                     all_results.append((dist, metadata))
 
+        logger.debug("default_search total results=%d", len(all_results))
         all_results = sorted(all_results, key=lambda x: x[0])
         return [r[1] for r in all_results[:top_k]]
 
