@@ -46,25 +46,3 @@ class SentenceTransformerEmbedder:
     def embed(self, text: str) -> list[float]:
         embedding = self._model.encode([text], show_progress_bar=False)
         return embedding[0].tolist()
-
-
-def generate_recipe_embeddings(df, config):
-    """
-    Generate embeddings for recipe data columns (ingredients, title, etc.)
-    and add them as new columns to the DataFrame.
-    """
-    embedding_model = load_embedding_model(config)
-    batch_size = config["embedding"]["batch_size"]
-
-    columns_to_embed = {
-        "ingredients_cleaned": "ingredients_embedding",
-        "ingredients_with_quantities": "ingredients_with_quantities_embedding",
-        "name": "title_embedding",
-    }
-
-    for text_col, embed_col in columns_to_embed.items():
-        print(f"Embedding column: {text_col}")
-        texts = df[text_col].fillna("").astype(str).tolist()
-        df[embed_col] = embed_texts(texts, embedding_model, batch_size)
-
-    return df

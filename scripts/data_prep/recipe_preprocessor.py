@@ -1,7 +1,7 @@
 from typing import Optional
 
 import pandas as pd
-from app.utils.helper import (
+from scripts.data_prep.helpers import (
     clean_string_list,
     combine_ingredients_with_quantities,
     parse_iso_duration,

@@ -5,7 +5,8 @@
 - The repository root **is** the backend. The README references a `backend/` folder, but all code and configs live at the repo root (`main.py`, `app/`, `requirements.txt`, etc.).
 - FastAPI entrypoint: `main.py`.
 - Routers: `app/api/chat.py` (`/chat`) and `app/api/data_preparation.py` (`/data`).
-- Core logic lives in `app/utils/` (embeddings, FAISS, LLM, prompts, preprocessing, intent detection).
+- Core runtime logic lives in `app/utils/` (embeddings, FAISS, LLM, prompts, intent detection, recipe search).
+- Data-preparation logic lives in `scripts/data_prep/` (recipe preprocessing, embedding generation, FAISS index building). These modules are only consumed by `scripts/prepare_data.py`.
 
 ## Required Setup (Not in Repo)
 
@@ -58,8 +59,7 @@ This script cleans the CSV, generates sentence-transformer embeddings, serialize
 
 ## Known Code Quirks
 
-- `app/api/data_preparation.py` line 2 imports from `backend.app.utils.recipe_preprocessor`. Because the repo root is the backend, this path is invalid. It should be `app.utils.recipe_preprocessor`. Hitting `/data/initialize-recipes` will raise an `ModuleNotFoundError` until this is fixed.
-- ~~The preprocessor (`app/utils/recipe_preprocessor.py`) does **not** create the `faiss_index` column required by `FAISSHandler.__init__` (`df.set_index("faiss_index")`).~~ **Fixed**: `clean_recipe_data()` now adds `df['faiss_index'] = df.index` at the end.
+- ~~The preprocessor (`app/utils/recipe_preprocessor.py`) does **not** create the `faiss_index` column required by `FAISSHandler.__init__` (`df.set_index("faiss_index")`).~~ **Fixed**: `clean_recipe_data()` now adds `df['faiss_index'] = df.index` at the end. (Module relocated to `scripts/data_prep/recipe_preprocessor.py`.)
 
 ## Testing
 

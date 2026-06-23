@@ -11,10 +11,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.utils.config_loader import load_config
-from app.utils.embedder import generate_recipe_embeddings
-from app.utils.faiss_handler import build_recipe_faiss_indexes
-from app.utils.recipe_preprocessor import clean_recipe_data, load_recipe_data
 from app.utils.sqlite_store import RecipeSQLiteStore
+from scripts.data_prep.embeddings import generate_recipe_embeddings
+from scripts.data_prep.indexes import build_recipe_faiss_indexes
+from scripts.data_prep.recipe_preprocessor import clean_recipe_data, load_recipe_data
 
 
 def download_raw_dataset(raw_path: str) -> None:
