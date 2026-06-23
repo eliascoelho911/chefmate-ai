@@ -1,0 +1,22 @@
+from fastapi import APIRouter
+from pydantic import BaseModel
+from typing import List
+from app.core.startup import GlobalState
+from app.core.models import Recipe
+
+router = APIRouter()
+
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+class SearchResponse(BaseModel):
+    results: List[Recipe]
+
+
+@router.post("/search", response_model=SearchResponse)
+def search_recipes(request: SearchRequest):
+    results = GlobalState.recipe_search.search(request.query, top_k=request.top_k)
+    return SearchResponse(results=results)
