@@ -1,12 +1,72 @@
-from typing import List, Dict
+from typing import List, Dict, Any
 import re
+
+
+def _format_recipe_as_markdown(recipe: Any) -> str:
+    """Format a recipe dict/metadata as readable Markdown text."""
+    if isinstance(recipe, str):
+        return recipe
+
+    if not isinstance(recipe, dict):
+        return str(recipe)
+
+    name = recipe.get("name", "Unnamed Recipe")
+    ingredients = recipe.get("ingredients_with_quantities", recipe.get("ingredients_cleaned", []))
+    instructions = recipe.get("recipe_instructions", [])
+    category = recipe.get("category", recipe.get("recipe_category", ""))
+    calories = recipe.get("calories", "")
+    total_time = recipe.get("total_time", "")
+    rating = recipe.get("rating", recipe.get("aggregated_rating", None))
+    images = recipe.get("images", [])
+
+    lines = [f"### {name}"]
+
+    if category:
+        lines.append(f"**Category:** {category}")
+    if calories:
+        lines.append(f"**Calories:** {calories}")
+    if total_time:
+        lines.append(f"**Total Time:** {total_time}")
+    if rating is not None and rating != "":
+        lines.append(f"**Rating:** {rating}")
+
+    # Images
+    if images and isinstance(images, list) and len(images) > 0:
+        first_img = images[0] if images[0] and str(images[0]).strip() else None
+        if first_img:
+            lines.append(f"![{name}]({first_img})")
+
+    # Ingredients
+    if ingredients:
+        lines.append("\n**Ingredients:**")
+        if isinstance(ingredients, list):
+            for ing in ingredients:
+                lines.append(f"- {ing}")
+        else:
+            lines.append(f"- {ingredients}")
+
+    # Instructions
+    if instructions:
+        lines.append("\n**Instructions:**")
+        if isinstance(instructions, list):
+            for step in instructions:
+                lines.append(f"- {step}")
+        else:
+            lines.append(f"{instructions}")
+
+    return "\n".join(lines)
+
 
 def build_chat_messages(system_prompt: str, retrieved_chunks: list, chat_history: list) -> list:
     """
     Constrói uma lista de mensagens no formato da API Chat Completions (OpenRouter/OpenAI).
     """
     if retrieved_chunks:
-        context_block = "\n".join(f"Recipe {i+1}:\n{chunk}" for i, chunk in enumerate(retrieved_chunks))
+        formatted_chunks = []
+        for i, chunk in enumerate(retrieved_chunks):
+            md = _format_recipe_as_markdown(chunk)
+            formatted_chunks.append(f"Recipe {i+1}:\n{md}")
+        context_block = "\n\n".join(formatted_chunks)
         context_message = f"[Context Retrieved from Knowledge Base]\n{context_block}\n"
     else:
         context_message = "[No context retrieved. Try to respond based on the chat history or ask the user for clarification.]\n"
@@ -38,7 +98,11 @@ def construct_prompt(system_prompt: str, retrieved_chunks: list, chat_history: l
     """
     # Formatting retrieved chunks
     if retrieved_chunks:
-        context_block = "\n".join(f"Recipe {i+1}:\n{chunk}" for i, chunk in enumerate(retrieved_chunks))
+        formatted_chunks = []
+        for i, chunk in enumerate(retrieved_chunks):
+            md = _format_recipe_as_markdown(chunk)
+            formatted_chunks.append(f"Recipe {i+1}:\n{md}")
+        context_block = "\n\n".join(formatted_chunks)
         context_message = f"[Context Retrieved from Knowledge Base]\n{context_block}\n"
     else:
         context_message = "[No context retrieved. Try to respond based on the chat history or ask the user for clarification.]\n"
@@ -69,30 +133,53 @@ def generate_system_prompt(user_message: str) -> str:
             r"\b(available ingredients?|leftovers?|at home)\b",
             r"\b(good|easy|quick|simple|healthy).*\brecipes?\b",
             r"\b(dinner|lunch|breakfast|snack).*ideas?\b",
+            # Portuguese
+            r"\b(sugira|sugere|recomende|recomenda|me dê|dê|mostre|encontre|alguma)\b.*\b(receitas?|pratos?|refeições?)\b",
+            r"\b(o que posso (fazer|cozinhar|preparar))\b.*\b(com|usando)\b.*",
+            r"\b(ingredientes disponiveis?|sobras?|em casa)\b",
+            r"\b(boa|boa|fácil|facil|rapido|rápido|simples|saudavel|saudável).*\breceitas?\b",
+            r"\b(jantar|almoço|almoco|cafe da manha|cafe da manhã|lanche).*\b(ideias?|sugestões?|sugestoes?)\b",
         ],
         "IngredientQuery": [
             r"\b(ingredients?|need(ed)?|require|contain|consist of)\b",
             r"\b(do i need|what do i need|is it made of)\b.*",
+            # Portuguese
+            r"\b(ingredientes?|preciso|necessito|contém|contem|consiste em)\b",
+            r"\b(preciso de|o que preciso|do que é feito)\b.*",
         ],
         "InstructionsOnly": [
             r"\b(how to|steps to|prepare|make|cook|method|instruction(s)?)\b.*",
             r"\bprocedure\b",
+            # Portuguese
+            r"\b(como (fazer|preparar)|passos para|modo de preparo|instrucoes?|instruções?)\b.*",
+            r"\bprocedimento\b",
         ],
         "NutritionInfo": [
             r"\b(calories|nutritional|health(y)?|macro|carbs|protein)\b",
+            # Portuguese
+            r"\b(calorias|nutricional|nutritivo|saudavel|saudável|macro|carboidratos|proteina|proteína)\b",
         ],
         "CookingTimeFilter": [
             r"\b(time|required|cook(ing)? time|under \d{1,3} (mins?|minutes?))\b",
             r"\bquick|fast|30 min\b",
+            # Portuguese
+            r"\b(tempo|tempo de cozimento|em menos de \d{1,3} (min|minutos?))\b",
+            r"\brapido|rápido|rapida|rápida|30 min\b",
         ],
         "DietaryPreferences": [
             r"\b(vegetarian|vegan|gluten[- ]?free|dairy[- ]?free|low carb|low fat|keto|paleo)\b",
+            # Portuguese
+            r"\b(vegetariano|vegano|sem gluten|sem glúten|sem lactose|low carb|baixa carb|baixa gordura|keto|paleo)\b",
         ],
         "ExpandRecipe": [
             r"\b(more details|elaborate|explain more|show full|tell me more)\b",
+            # Portuguese
+            r"\b(mais detalhes|detalhe|explique mais|mostre completo|me fale mais|fale mais)\b",
         ],
         "ToolOrMethodQuery": [
             r"\b(do i need|how to use|can i use|tool(s)?|equipment|machine|oven|grill|stove|microwave)\b",
+            # Portuguese
+            r"\b(preciso de|como usar|posso usar|ferramenta|equipamento|maquina|máquina|forno|churrasqueira|fogao|fogão|microondas)\b",
         ],
     }
 
@@ -145,6 +232,7 @@ For tool/method questions:
 You are a helpful, friendly AI cooking assistant. Always:
 - Format response using proper Markdown syntax [e.g., Use **bold** for key terms].
 - Ask clarifying questions if anything is ambiguous.
+- Respond in the same language the user is writing (e.g., Portuguese, English, Spanish, etc.).
 Strictly avoid responses stating: "Based on the knowledge base", or similar phrases.
 Keep answers concise and helpful.
 """

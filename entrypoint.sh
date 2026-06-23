@@ -7,10 +7,16 @@ PKL_FILE="/app/data/processed/cleaned_recipes.pkl"
 INDEX_DIR="/app/data/indexes"
 
 if [ -f "$PKL_FILE" ] && [ -d "$INDEX_DIR" ] && [ "$(ls -A "$INDEX_DIR")" ]; then
-    echo "[INFO] Data artifacts found. Skipping preparation."
+    echo "[INFO] Data artifacts found. Starting server..."
 else
-    echo "[INFO] Data artifacts not found. Running data preparation..."
-    python /app/scripts/prepare_data.py
+    echo "[ERROR] Data artifacts not found."
+    echo "[ERROR] Expected:"
+    echo "  - $PKL_FILE"
+    echo "  - $INDEX_DIR/ (non-empty)"
+    echo "[ERROR] Please run data preparation manually before starting the container:"
+    echo "  docker compose exec chefmate python scripts/prepare_data.py"
+    echo "[ERROR] Or transfer existing artifacts into the container/volume."
+    exit 1
 fi
 
 echo "[INFO] Starting Uvicorn server..."

@@ -17,10 +17,15 @@ def load_config(config_file: str = "config.yml") -> dict:
             "cleaned_data_csv": os.getenv("CLEANED_DATA_CSV", "data/processed/cleaned_recipes.csv"),
             "cleaned_data_pkl": os.getenv("CLEANED_DATA_PKL", "data/processed/cleaned_recipes.pkl"),
             "faiss_index_dir": os.getenv("FAISS_INDEX_DIR", "data/indexes"),
+            "sqlite_db": os.getenv("SQLITE_DB", "data/processed/recipes.db"),
         },
         "embedding": {
             "model_name": os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
             "batch_size": int(os.getenv("EMBEDDING_BATCH_SIZE", "128")),
+        },
+        "faiss": {
+            "nprobe": int(os.getenv("FAISS_NPROBE", "16")),
+            "factory": os.getenv("FAISS_FACTORY", "IVF4096,PQ48"),
         },
         "openrouter": {
             "api_key": os.getenv("OPENROUTER_API_KEY", ""),

@@ -15,13 +15,35 @@ IntentType = Literal[
 
 class IntentDetector:
     def __init__(self):
-        self.recipe_keywords = ["recipe", "make", "cook", "prepare", "how to"]
-        self.ingredient_keywords = ["have", "with", "using", "ingredients"]
-        self.step_keywords = ["next step", "what's next", "then", "after that"]
-        self.diet_keywords = ["vegan", "vegetarian", "gluten", "keto", "halal", "diet"]
-        self.nutrition_keywords = ["calories", "nutrition", "protein", "carbs"]
-        self.time_keywords = ["quick", "under", "minutes", "fast", "less than"]
-        self.rating_keywords = ["top", "best", "highest rated", "popular"]
+        self.recipe_keywords = [
+            "recipe", "make", "cook", "prepare", "how to",
+            "receita", "fazer", "cozinhar", "preparar", "como fazer",
+            "sugere", "sugira", "quero", "gostaria"
+        ]
+        self.ingredient_keywords = [
+            "have", "with", "using", "ingredients",
+            "tenho", "com", "usando", "ingredientes"
+        ]
+        self.step_keywords = [
+            "next step", "what's next", "then", "after that",
+            "proximo passo", "próximo passo", "depois", "e agora", "o que vem depois"
+        ]
+        self.diet_keywords = [
+            "vegan", "vegetarian", "gluten", "keto", "halal", "diet",
+            "vegano", "vegetariano", "glúten", "dieta"
+        ]
+        self.nutrition_keywords = [
+            "calories", "nutrition", "protein", "carbs",
+            "calorias", "nutricao", "nutrição", "proteina", "proteína", "carboidratos"
+        ]
+        self.time_keywords = [
+            "quick", "under", "minutes", "fast", "less than",
+            "rapido", "rápido", "rapida", "rápida", "em menos de", "minutos"
+        ]
+        self.rating_keywords = [
+            "top", "best", "highest rated", "popular",
+            "melhor", "mais bem avaliado", "popular", "mais popular"
+        ]
 
     def detect_intent(self, user_input: str) -> Dict[str, str]:
         print(user_input)
@@ -30,14 +52,12 @@ class IntentDetector:
         # --- Specific Recipe ---
         if re.search(r"(recipe for|how to make|tell me about)\s+[a-z ]+", user_input):
             return {"intent": "specific_recipe"}
+        if re.search(r"(receita de|como fazer|me fale sobre)\s+[a-zà-ú ]+", user_input):
+            return {"intent": "specific_recipe"}
 
         # --- Ingredient-Based Search ---
         if any(keyword in user_input for keyword in self.ingredient_keywords) and ',' in user_input:
             return {"intent": "ingredient_search"}
-
-        # --- Recipe Generation ---
-        if any(kw in user_input for kw in self.recipe_keywords) and "recipe" in user_input:
-            return {"intent": "recipe_generation"}
 
         # --- Step Navigation ---
         if any(kw in user_input for kw in self.step_keywords):
@@ -46,6 +66,14 @@ class IntentDetector:
         # --- Dietary Filter ---
         if any(kw in user_input for kw in self.diet_keywords):
             return {"intent": "diet_filter"}
+
+        # --- Recipe Generation ---
+        if any(kw in user_input for kw in self.recipe_keywords) and ("recipe" in user_input or "receita" in user_input):
+            return {"intent": "recipe_generation"}
+
+        # --- Portuguese generic meal suggestion (fallback) ---
+        if re.search(r"\b(sugere|sugira|quero|gostaria|me indique)\b.*\b(jantar|almoco|almoço|cafe|cafe da manha|lanche|refeição|refeicao)\b", user_input):
+            return {"intent": "recipe_generation"}
 
         # --- Nutrition Info ---
         if any(kw in user_input for kw in self.nutrition_keywords):
