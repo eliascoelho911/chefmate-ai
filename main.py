@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.startup import init_dependencies
-from app.api.chat import router as chat_router
 from app.api.recipes import router as recipes_router
 
 
@@ -22,7 +21,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(chat_router, prefix="/chat")
 app.include_router(recipes_router, prefix="/recipes")
 
 

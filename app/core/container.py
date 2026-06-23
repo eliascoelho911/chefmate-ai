@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.core.interfaces import Embedder
+from app.utils.chat_orchestrator import ChatOrchestrator
 from app.utils.recipe_search import RecipeSearch
 from app.utils.llm_model import LLMRunner
 from app.utils.intent_detector import IntentDetector
@@ -21,6 +22,7 @@ class AppContainer:
     intent_detector: IntentDetector
     embedder: Embedder
     faiss_handler: FAISSHandler
+    chat_orchestrator: ChatOrchestrator
 
 
 # Module-level singleton. Set once at startup; read-only thereafter.

@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Optional
 from app.core.interfaces import Embedder, IntentDetector, RecipeRetriever
 from app.core.models import Recipe
 
@@ -22,8 +22,14 @@ class RecipeSearch:
         self._intent_detector = intent_detector
         self._retriever = retriever
 
-    def search(self, query: str, top_k: int = 5) -> List[Recipe]:
-        intent = self._intent_detector.detect(query)
+    def detect_intent(self, query: str) -> str:
+        return self._intent_detector.detect(query)
+
+    def search(
+        self, query: str, intent: Optional[str] = None, top_k: int = 5
+    ) -> List[Recipe]:
+        if intent is None:
+            intent = self._intent_detector.detect(query)
         logger.debug("query='%s' intent='%s'", query, intent)
         embedding = self._embedder.embed(query)
         logger.debug("embedding len=%d", len(embedding))
