@@ -114,7 +114,7 @@ backend/
 ### Backend API and Flow
 
 - [**Backend API Documentation**](./docs/backend_api_doc.pdf)  
-  Comprehensive reference for the `/chat` endpoint and RAG + LLM response pipeline.
+  Comprehensive reference for the recipe search endpoints and RAG pipeline.
 
 - [**RAG Flow Diagram**](./docs/rag_llm_backend_flow.png)  
   *High-level flowchart of the backend request pipeline (RAG + LLM).*
@@ -316,11 +316,14 @@ To ensure Chefmate AI backend is working correctly, follow these steps for basic
     uvicorn main:app --reload
     ```
 
-- Try endpoint: `/chat`
+- Try endpoint: `/recipes/suggest-by-ingredients`
 
 - Test a basic ingredients POST request:
     ```bash
-    curl -X POST http://localhost:8000/chat/ -H "Content-Type: application/json" --data-raw '{"chat_history":[{"role":"user","content":"What can I cook with flour, eggs, salt, onion and garlic"}]}'
+    curl -X POST http://localhost:8000/recipes/suggest-by-ingredients \
+      -H "Content-Type: application/json" \
+      -H "X-API-Key: $CHEFMATE_API_KEY" \
+      --data-raw '{"proteinas":["chicken"],"carboidratos":["rice"],"legumes":["broccoli"]}'
     ```
 
 > Full automated tests will be added in future version.

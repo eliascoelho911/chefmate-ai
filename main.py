@@ -1,8 +1,8 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.startup import init_dependencies
 from app.api.recipes import router as recipes_router
+from app.middleware.security import APIKeyMiddleware
 
 
 @asynccontextmanager
@@ -13,15 +13,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Chefmate AI", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Enforce API key on all requests (healthcheck is exempt)
+app.add_middleware(APIKeyMiddleware)
 
 app.include_router(recipes_router, prefix="/recipes")
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 @app.get("/")

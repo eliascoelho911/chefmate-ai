@@ -4,7 +4,7 @@
 
 - The repository root **is** the backend. The README references a `backend/` folder, but all code and configs live at the repo root (`main.py`, `app/`, `requirements.txt`, etc.).
 - FastAPI entrypoint: `main.py`.
-- Routers: `app/api/chat.py` (`/chat`) and `app/api/data_preparation.py` (`/data`).
+- Router: `app/api/recipes.py` (`/recipes`).
 - Core runtime logic lives in `app/utils/` (embeddings, FAISS, LLM, prompts, intent detection, recipe search).
 - Data-preparation logic lives in `scripts/data_prep/` (recipe preprocessing, embedding generation, FAISS index building). These modules are only consumed by `scripts/prepare_data.py`.
 
@@ -64,11 +64,12 @@ This script cleans the CSV, generates sentence-transformer embeddings, serialize
 ## Testing
 
 - There are **no automated tests** in the repo.
-- Manual smoke test for `/chat`:
+- Manual smoke test for `/recipes/suggest-by-ingredients`:
   ```bash
-  curl -X POST http://localhost:8000/chat/ \
+  curl -X POST http://localhost:8000/recipes/suggest-by-ingredients \
     -H "Content-Type: application/json" \
-    --data-raw '{"chat_history":[{"role":"user","content":"What can I cook with flour, eggs, salt, onion and garlic"}]}'
+    -H "X-API-Key: $CHEFMATE_API_KEY" \
+    --data-raw '{"proteinas":["chicken"],"carboidratos":["rice"],"legumes":["broccoli"]}'
   ```
 
 ## Startup Dependency Chain
@@ -108,4 +109,5 @@ The `docker-compose.yml` enforces resource limits matching the target hardware:
 
 - Python 3.10+ required.
 - Prompt truncation is word-count based (`len(tokens) > context_length - 512`), not actual token count.
-- CORS is wide open (`allow_origins=["*"]`).
+- Authentication is enforced via `X-API-Key` header (see `CHEFMATE_API_KEY` env var). The healthcheck endpoint is exempt.
+- CORS is disabled; the service is designed for server-to-server calls only.
