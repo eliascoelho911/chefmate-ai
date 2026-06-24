@@ -5,6 +5,7 @@ from pydantic import BaseModel
 class Recipe(BaseModel):
     faiss_index: int
     name: str
+    ingredients_cleaned: List[str]
     ingredients_with_quantities: List[str]
     recipe_instructions: List[str]
     category: str

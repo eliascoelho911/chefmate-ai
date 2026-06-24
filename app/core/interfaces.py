@@ -16,6 +16,14 @@ class RecipeRetriever(Protocol):
         self, query_embedding: List[float], intent: Intent, top_k: int
     ) -> List[Recipe]: ...
 
+    def retrieve_with_ingredients(
+        self,
+        query_embedding: List[float],
+        intent: Intent,
+        top_k: int,
+        required_ingredients: List[str],
+    ) -> List[Recipe]: ...
+
 
 class LLMRunner(Protocol):
     def stream_response(self, messages: list) -> Iterator[str]: ...

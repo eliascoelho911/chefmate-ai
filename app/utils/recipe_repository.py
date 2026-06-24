@@ -13,9 +13,8 @@ class RecipeRepository:
 
     Interface:
         get_by_indices(indices) -> List[Recipe]
-
-    Hides column-to-field mapping, JSON deserialization, and the
-    SQLite schema from the rest of the application.
+        get_strict_ids(required) -> List[int]
+        get_partial_ids(required, exclude) -> List[tuple[int, int]]
     """
 
     def __init__(self, sqlite_store: RecipeSQLiteStore):
@@ -36,12 +35,24 @@ class RecipeRepository:
 
         return recipes
 
+    def get_strict_ids(self, required: List[str]) -> List[int]:
+        """Return faiss_indices that contain ALL required ingredients."""
+        return self._store.get_recipes_by_ingredients_all(required)
+
+    def get_partial_ids(
+        self, required: List[str], exclude: List[int]
+    ) -> List[tuple[int, int]]:
+        """Return (faiss_index, match_count) for recipes with at least one
+        required ingredient, excluding the given indices."""
+        return self._store.get_recipes_by_ingredients_any(required, exclude)
+
     @staticmethod
     def _row_to_recipe(row: dict) -> Recipe:
         """Map a deserialized SQLite row dict to a typed Recipe model."""
         return Recipe(
             faiss_index=row["faiss_index"],
             name=row.get("name") or "",
+            ingredients_cleaned=row.get("ingredients_cleaned") or [],
             ingredients_with_quantities=row.get("ingredients_with_quantities") or [],
             recipe_instructions=row.get("recipe_instructions") or [],
             category=row.get("recipe_category") or "",

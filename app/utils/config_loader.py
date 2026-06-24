@@ -37,6 +37,9 @@ def load_config(config_file: str = "config.yml") -> dict:
         "openrouter": {
             "api_key": os.getenv("OPENROUTER_API_KEY", ""),
             "model": os.getenv("OPENROUTER_MODEL", "openai/gpt-5.4-mini"),
+            "fast_model": os.getenv(
+                "OPENROUTER_FAST_MODEL", "meta-llama/llama-3.1-8b-instruct"
+            ),
         },
         "logging": {
             "level": os.getenv("LOG_LEVEL", "INFO"),

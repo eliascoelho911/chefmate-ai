@@ -169,6 +169,19 @@ def main():
             print(f"[INFO] Removed existing SQLite database: {db_path}")
         store = RecipeSQLiteStore(db_path)
         store.insert_recipes(df)
+
+        # Build inverted ingredient index for strict matching
+        print("[INFO] Building ingredient inverted index...")
+        records = []
+        for _, row in df.iterrows():
+            faiss_idx = row["faiss_index"]
+            ingredients = row.get("ingredients_cleaned") or []
+            for ingredient in ingredients:
+                if ingredient:
+                    records.append((ingredient, int(faiss_idx)))
+        store.bulk_insert_ingredient_index(records)
+        print(f"[INFO] Inserted {len(records)} ingredient index records")
+
         store.close()
     else:
         print("[INFO] SQLite database already exists. Skipping.")

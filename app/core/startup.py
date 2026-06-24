@@ -1,10 +1,13 @@
 import logging
 
+from openai import OpenAI
+
 from app.core.container import AppContainer, set_container
 from app.core.logging_config import setup_logging
 from app.utils.chat_orchestrator import ChatOrchestrator
 from app.utils.config_loader import load_config
 from app.utils.embedder import SentenceTransformerEmbedder, load_embedding_model
+from app.utils.ingredient_translator import IngredientTranslator
 from app.utils.intent_detector import IntentDetector
 from app.utils.llm_model import LLMRunner
 from app.utils.prompt_builder import PromptBuilder
@@ -45,6 +48,20 @@ def init_dependencies():
         model=config["openrouter"]["model"],
     )
 
+    fast_model = config.get("openrouter", {}).get(
+        "fast_model", "meta-llama/llama-3.1-8b-instruct"
+    )
+    translator_client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=config["openrouter"]["api_key"],
+    )
+    ingredient_translator = IngredientTranslator(
+        client=translator_client,
+        model=fast_model,
+        cache_store=sqlite_store,
+    )
+    logging.info("IngredientTranslator initialized with model=%s", fast_model)
+
     embedder = SentenceTransformerEmbedder(embedding_model)
     retriever = FAISSRecipeRetriever(
         vector_index=vector_index,
@@ -76,6 +93,7 @@ def init_dependencies():
         vector_index=vector_index,
         recipe_repository=recipe_repository,
         chat_orchestrator=chat_orchestrator,
+        ingredient_translator=ingredient_translator,
     )
     set_container(container)
     logging.info("AppContainer initialized and set")

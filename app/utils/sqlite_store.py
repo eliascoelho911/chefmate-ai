@@ -39,6 +39,19 @@ CREATE TABLE IF NOT EXISTS recipes (
     ingredients_with_quantities TEXT   -- JSON list
 );
 CREATE INDEX IF NOT EXISTS idx_name ON recipes(name);
+
+CREATE TABLE IF NOT EXISTS ingredient_translations (
+    pt TEXT PRIMARY KEY,
+    en TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ingredient_index (
+    ingredient TEXT NOT NULL,
+    faiss_index INTEGER NOT NULL,
+    PRIMARY KEY (ingredient, faiss_index)
+);
+CREATE INDEX IF NOT EXISTS idx_ingredient ON ingredient_index(ingredient);
 """
 
 # Columns that are stored as JSON lists in SQLite
@@ -168,6 +181,96 @@ class RecipeSQLiteStore:
     def count(self) -> int:
         cursor = self.conn.execute("SELECT COUNT(*) FROM recipes")
         return cursor.fetchone()[0]
+
+    # ------------------------------------------------------------------
+    # Ingredient translation cache
+    # ------------------------------------------------------------------
+
+    def get_translation(self, pt: str) -> Optional[str]:
+        cursor = self.conn.execute(
+            "SELECT en FROM ingredient_translations WHERE pt = ?", (pt,)
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+    def save_translation(self, pt: str, en: str) -> None:
+        self.conn.execute(
+            "INSERT OR REPLACE INTO ingredient_translations (pt, en) VALUES (?, ?)",
+            (pt, en),
+        )
+        self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Ingredient inverted index
+    # ------------------------------------------------------------------
+
+    def insert_ingredient_index(self, ingredient: str, faiss_index: int) -> None:
+        self.conn.execute(
+            "INSERT OR IGNORE INTO ingredient_index (ingredient, faiss_index) VALUES (?, ?)",
+            (ingredient, faiss_index),
+        )
+
+    def bulk_insert_ingredient_index(self, records: list[tuple[str, int]]) -> None:
+        self.conn.executemany(
+            "INSERT OR IGNORE INTO ingredient_index (ingredient, faiss_index) VALUES (?, ?)",
+            records,
+        )
+        self.conn.commit()
+
+    def get_recipes_by_ingredients_all(self, required: list[str]) -> list[int]:
+        """Return faiss_indices that contain ALL required ingredients."""
+        if not required:
+            return []
+        placeholders = ",".join(["?"] * len(required))
+        sql = f"""
+            SELECT faiss_index FROM ingredient_index
+            WHERE ingredient IN ({placeholders})
+            GROUP BY faiss_index
+            HAVING COUNT(DISTINCT ingredient) = ?
+        """
+        cursor = self.conn.execute(sql, (*required, len(required)))
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_recipes_by_ingredients_any(
+        self, required: list[str], exclude: list[int]
+    ) -> list[tuple[int, int]]:
+        """Return (faiss_index, match_count) for recipes with at least one ingredient,
+        excluding the given faiss_indices."""
+        if not required:
+            return []
+        placeholders = ",".join(["?"] * len(required))
+        exclude_placeholders = ",".join(["?"] * len(exclude)) if exclude else ""
+        sql = f"""
+            SELECT faiss_index, COUNT(DISTINCT ingredient) as match_count
+            FROM ingredient_index
+            WHERE ingredient IN ({placeholders})
+        """
+        params: list = list(required)
+        if exclude:
+            sql += f" AND faiss_index NOT IN ({exclude_placeholders})"
+            params.extend(exclude)
+        sql += " GROUP BY faiss_index ORDER BY match_count DESC"
+        cursor = self.conn.execute(sql, params)
+        return [(row[0], row[1]) for row in cursor.fetchall()]
+
+    def get_recipe_ingredients(self, faiss_index: int) -> list[str]:
+        cursor = self.conn.execute(
+            "SELECT ingredients_cleaned FROM recipes WHERE faiss_index = ?",
+            (faiss_index,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return []
+        raw = row[0]
+        if isinstance(raw, str):
+            try:
+                import json
+
+                parsed = json.loads(raw)
+                return parsed if isinstance(parsed, list) else []
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return []
 
     def close(self):
         self.conn.close()

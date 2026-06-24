@@ -14,7 +14,7 @@ class RecipeSearch:
     embed query -> detect intent -> retrieve recipes.
 
     The public interface is a single method:
-        search(query, top_k) -> List[Recipe]
+        search(query, top_k, required_ingredients) -> List[Recipe]
 
     Intent detection is an internal step; callers that already know
     the intent (e.g. API endpoints) may pass it via the optional
@@ -32,7 +32,11 @@ class RecipeSearch:
         self._retriever = retriever
 
     def search(
-        self, query: str, intent: Optional[Intent] = None, top_k: int = 5
+        self,
+        query: str,
+        intent: Optional[Intent] = None,
+        top_k: int = 5,
+        required_ingredients: Optional[List[str]] = None,
     ) -> List[Recipe]:
         resolved_intent = (
             intent if intent is not None else self._intent_detector.detect(query)
@@ -40,6 +44,13 @@ class RecipeSearch:
         logger.debug("query='%s' intent=%s", query, resolved_intent.value)
         embedding = self._embedder.embed(query)
         logger.debug("embedding len=%d", len(embedding))
-        results = self._retriever.retrieve(embedding, resolved_intent, top_k)
+
+        if required_ingredients:
+            results = self._retriever.retrieve_with_ingredients(
+                embedding, resolved_intent, top_k, required_ingredients
+            )
+        else:
+            results = self._retriever.retrieve(embedding, resolved_intent, top_k)
+
         logger.debug("results count=%d", len(results))
         return results

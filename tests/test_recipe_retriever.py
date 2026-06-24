@@ -47,6 +47,7 @@ class FakeRecipeRepository:
             10: Recipe(
                 faiss_index=10,
                 name="Chicken Rice",
+                ingredients_cleaned=["rice", "chicken"],
                 ingredients_with_quantities=["1 cup rice", "200g chicken"],
                 recipe_instructions=["Cook rice", "Grill chicken"],
                 category="Main",
@@ -58,6 +59,7 @@ class FakeRecipeRepository:
             20: Recipe(
                 faiss_index=20,
                 name="Beef Stew",
+                ingredients_cleaned=["beef", "carrots"],
                 ingredients_with_quantities=["500g beef", "2 carrots"],
                 recipe_instructions=["Brown beef", "Simmer"],
                 category="Main",
@@ -70,6 +72,12 @@ class FakeRecipeRepository:
 
     def get_by_indices(self, indices):
         return [self._recipes[i] for i in indices if i in self._recipes]
+
+    def get_strict_ids(self, required):
+        return []
+
+    def get_partial_ids(self, required, exclude):
+        return []
 
 
 def test_retrieve_maps_intent_to_index():

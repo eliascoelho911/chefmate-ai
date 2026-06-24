@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Security
+from fastapi import APIRouter, Depends, Security, HTTPException
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import List
 from app.core.container import AppContainer, get_container
 from app.core.intent import Intent
 from app.core.models import Recipe
+from app.utils.ingredient_translator import TranslationError
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -54,7 +55,24 @@ def suggest_by_ingredients(
 
     query = "recipes with " + ", ".join(parts) if parts else "recipes"
 
+    # Gather all required ingredients for strict filtering
+    required = []
+    if request.proteinas:
+        required.extend(request.proteinas)
+    if request.carboidratos:
+        required.extend(request.carboidratos)
+    if request.legumes:
+        required.extend(request.legumes)
+
+    try:
+        translated = container.ingredient_translator.translate_batch(required)
+    except TranslationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
     results = container.recipe_search.search(
-        query, intent=Intent.INGREDIENT_SEARCH, top_k=request.top_k
+        query,
+        intent=Intent.INGREDIENT_SEARCH,
+        top_k=request.top_k,
+        required_ingredients=translated,
     )
     return SuggestByIngredientsResponse(results=results)
