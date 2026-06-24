@@ -1,29 +1,42 @@
+import logging
 import os
 import re
+from typing import Optional
+
 from openai import OpenAI
-from app.utils.config_loader import load_config
+
+logger = logging.getLogger(__name__)
+
 
 class LLMRunner:
-    def __init__(self):
-        config = load_config()
-        self.context_length = 4096
+    """
+    Adapter that satisfies the LLMRunner protocol using OpenRouter.
 
-        api_key = config.get("openrouter", {}).get("api_key")
+    Interface:
+        stream_response(messages) -> Iterator[str]
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "openai/gpt-5.4-mini",
+        context_length: int = 4096,
+    ):
         if not api_key:
-            api_key = os.getenv("OPENROUTER_API_KEY")
+            raise ValueError("OpenRouter API key is required")
 
-        self.model = config.get("openrouter", {}).get("model", "openai/gpt-5.4-mini")
-
+        self.model = model
+        self.context_length = context_length
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=api_key
+            api_key=api_key,
         )
-        print(f"[INFO] Configured OpenRouter client for model {self.model}")
+        logger.info("Configured OpenRouter client for model %s", self.model)
 
     def truncate_prompt(self, prompt: str) -> str:
         tokens = prompt.split()
         if len(tokens) > self.context_length - 512:
-            tokens = tokens[-(self.context_length - 512):]
+            tokens = tokens[-(self.context_length - 512) :]
         return " ".join(tokens)
 
     def _truncate_messages(self, messages: list) -> list:
@@ -34,30 +47,32 @@ class LLMRunner:
             system_msg["content"] = self.truncate_prompt(system_msg["content"])
         return messages
 
-    def _clean_streamed_text(self, text: str) -> str:
-        text = re.sub(r'[ ]{2,}', ' ', text)
-        text = re.sub(r'\s+\n', '\n', text)
-        text = re.sub(r'\n\s+', '\n', text)
+    @staticmethod
+    def _clean_streamed_text(text: str) -> str:
+        text = re.sub(r"[ ]{2,}", " ", text)
+        text = re.sub(r"\s+\n", "\n", text)
+        text = re.sub(r"\n\s+", "\n", text)
         return text
 
     def generate_response(self, messages: list) -> str:
         try:
-            print("[INFO] Generating full response via OpenRouter...")
+            logger.info("Generating full response via OpenRouter...")
             messages = self._truncate_messages(messages)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 max_tokens=512,
                 temperature=0.7,
-                top_p=0.9
+                top_p=0.9,
             )
-            return response.choices[0].message.content.strip()
+            content = response.choices[0].message.content
+            return content.strip() if content else ""
         except Exception as e:
             return f"Error generating response: {str(e)}"
 
     def stream_response(self, messages: list):
         try:
-            print("[INFO] Streaming response via OpenRouter...")
+            logger.info("Streaming response via OpenRouter...")
             messages = self._truncate_messages(messages)
             buffer = ""
             stream = self.client.chat.completions.create(
@@ -66,7 +81,7 @@ class LLMRunner:
                 max_tokens=512,
                 temperature=0.7,
                 top_p=0.9,
-                stream=True
+                stream=True,
             )
             for chunk in stream:
                 token = chunk.choices[0].delta.content
@@ -74,7 +89,7 @@ class LLMRunner:
                     continue
                 buffer += token
 
-                if re.search(r"[ \n]$", buffer) or re.search(r'\]\([^)]+?\)$', buffer):
+                if re.search(r"[ \n]$", buffer) or re.search(r"\]\([^)]+?\)$", buffer):
                     cleaned = self._clean_streamed_text(buffer)
                     if cleaned:
                         yield cleaned

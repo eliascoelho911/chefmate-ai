@@ -1,18 +1,12 @@
 from unittest.mock import MagicMock
 
+from app.core.intent import Intent
 from app.core.models import ChatHistory, ChatMessage, Recipe
 from app.utils.chat_orchestrator import ChatOrchestrator
 
 
 class FakeRecipeSearch:
-    def __init__(self):
-        self._intent_detector = MagicMock()
-        self._intent_detector.detect = MagicMock(return_value="recipe_generation")
-
-    def detect_intent(self, query: str) -> str:
-        return self._intent_detector.detect(query)
-
-    def search(self, query: str, intent: str = None, top_k: int = 5):
+    def search(self, query, intent=None, top_k=5):
         return [
             Recipe(
                 faiss_index=0,
@@ -26,6 +20,11 @@ class FakeRecipeSearch:
                 images=[],
             )
         ]
+
+
+class FakeIntentDetector:
+    def detect(self, user_input):
+        return Intent.RECIPE_GENERATION
 
 
 class FakeLLMRunner:
@@ -43,6 +42,7 @@ class FakePromptBuilder:
 def test_chat_orchestrator_returns_tokens():
     orchestrator = ChatOrchestrator(
         recipe_search=FakeRecipeSearch(),
+        intent_detector=FakeIntentDetector(),
         llm_runner=FakeLLMRunner(),
         prompt_builder=FakePromptBuilder(),
     )
@@ -54,6 +54,7 @@ def test_chat_orchestrator_returns_tokens():
 def test_chat_orchestrator_rejects_empty_history():
     orchestrator = ChatOrchestrator(
         recipe_search=FakeRecipeSearch(),
+        intent_detector=FakeIntentDetector(),
         llm_runner=FakeLLMRunner(),
         prompt_builder=FakePromptBuilder(),
     )
@@ -68,6 +69,7 @@ def test_chat_orchestrator_rejects_empty_history():
 def test_chat_orchestrator_rejects_no_user_message():
     orchestrator = ChatOrchestrator(
         recipe_search=FakeRecipeSearch(),
+        intent_detector=FakeIntentDetector(),
         llm_runner=FakeLLMRunner(),
         prompt_builder=FakePromptBuilder(),
     )

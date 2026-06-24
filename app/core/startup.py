@@ -5,13 +5,16 @@ from app.core.logging_config import setup_logging
 from app.utils.chat_orchestrator import ChatOrchestrator
 from app.utils.config_loader import load_config
 from app.utils.embedder import SentenceTransformerEmbedder, load_embedding_model
-from app.utils.faiss_handler import FAISSHandler
 from app.utils.intent_detector import IntentDetector
 from app.utils.llm_model import LLMRunner
 from app.utils.prompt_builder import PromptBuilder
+from app.utils.recipe_repository import RecipeRepository
 from app.utils.recipe_retriever import FAISSRecipeRetriever
 from app.utils.recipe_search import RecipeSearch
 from app.utils.sqlite_store import RecipeSQLiteStore
+from app.utils.vector_index import VectorIndex
+
+logger = logging.getLogger(__name__)
 
 
 def init_dependencies():
@@ -28,14 +31,25 @@ def init_dependencies():
         "SQLite store loaded from %s (%d recipes)", db_path, sqlite_store.count()
     )
 
-    faiss_handler = FAISSHandler(config, sqlite_store)
+    recipe_repository = RecipeRepository(sqlite_store)
+
+    vector_index = VectorIndex(
+        index_dir=config["paths"]["faiss_index_dir"],
+        nprobe=config.get("faiss", {}).get("nprobe", 16),
+    )
 
     intent_detector = IntentDetector()
 
-    llm_runner = LLMRunner()
+    llm_runner = LLMRunner(
+        api_key=config["openrouter"]["api_key"],
+        model=config["openrouter"]["model"],
+    )
 
     embedder = SentenceTransformerEmbedder(embedding_model)
-    retriever = FAISSRecipeRetriever(faiss_handler)
+    retriever = FAISSRecipeRetriever(
+        vector_index=vector_index,
+        recipe_repository=recipe_repository,
+    )
     recipe_search = RecipeSearch(
         embedder=embedder,
         intent_detector=intent_detector,
@@ -47,6 +61,7 @@ def init_dependencies():
 
     chat_orchestrator = ChatOrchestrator(
         recipe_search=recipe_search,
+        intent_detector=intent_detector,
         llm_runner=llm_runner,
         prompt_builder=prompt_builder,
     )
@@ -58,7 +73,8 @@ def init_dependencies():
         llm_runner=llm_runner,
         intent_detector=intent_detector,
         embedder=embedder,
-        faiss_handler=faiss_handler,
+        vector_index=vector_index,
+        recipe_repository=recipe_repository,
         chat_orchestrator=chat_orchestrator,
     )
     set_container(container)

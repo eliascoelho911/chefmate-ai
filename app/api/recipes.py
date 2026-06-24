@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import List
 from app.core.container import AppContainer, get_container
+from app.core.intent import Intent
 from app.core.models import Recipe
 
 router = APIRouter()
@@ -42,21 +43,15 @@ def suggest_by_ingredients(
 ):
     parts = []
     if request.proteinas:
-        parts.append(
-            ", ".join(request.proteinas)
-        )
+        parts.append(", ".join(request.proteinas))
     if request.carboidratos:
-        parts.append(
-            ", ".join(request.carboidratos)
-        )
+        parts.append(", ".join(request.carboidratos))
     if request.legumes:
-        parts.append(
-            ", ".join(request.legumes)
-        )
+        parts.append(", ".join(request.legumes))
 
     query = "recipes with " + ", ".join(parts) if parts else "recipes"
 
     results = container.recipe_search.search(
-        query, intent="ingredient_search", top_k=request.top_k
+        query, intent=Intent.INGREDIENT_SEARCH, top_k=request.top_k
     )
     return SuggestByIngredientsResponse(results=results)

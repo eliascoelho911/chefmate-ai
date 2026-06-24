@@ -86,15 +86,37 @@ def _deserialize_row(row: sqlite3.Row) -> Dict[str, Any]:
 def _get_columns() -> List[str]:
     """Ordered column list matching the schema."""
     return [
-        "faiss_index", "recipe_id", "name", "author_id", "author_name",
-        "cook_time", "prep_time", "total_time", "date_published",
-        "description", "images", "recipe_category", "keywords",
-        "recipe_ingredient_quantities", "recipe_ingredient_parts",
-        "aggregated_rating", "review_count", "calories", "fat_content",
-        "saturated_fat_content", "cholesterol_content", "sodium_content",
-        "carbohydrate_content", "fiber_content", "sugar_content",
-        "protein_content", "recipe_servings", "recipe_yield",
-        "recipe_instructions", "ingredients_raw", "ingredients_cleaned",
+        "faiss_index",
+        "recipe_id",
+        "name",
+        "author_id",
+        "author_name",
+        "cook_time",
+        "prep_time",
+        "total_time",
+        "date_published",
+        "description",
+        "images",
+        "recipe_category",
+        "keywords",
+        "recipe_ingredient_quantities",
+        "recipe_ingredient_parts",
+        "aggregated_rating",
+        "review_count",
+        "calories",
+        "fat_content",
+        "saturated_fat_content",
+        "cholesterol_content",
+        "sodium_content",
+        "carbohydrate_content",
+        "fiber_content",
+        "sugar_content",
+        "protein_content",
+        "recipe_servings",
+        "recipe_yield",
+        "recipe_instructions",
+        "ingredients_raw",
+        "ingredients_cleaned",
         "ingredients_with_quantities",
     ]
 
@@ -102,7 +124,9 @@ def _get_columns() -> List[str]:
 class RecipeSQLiteStore:
     def __init__(self, db_path: str):
         self.db_path = db_path
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db_dir = os.path.dirname(db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_schema()

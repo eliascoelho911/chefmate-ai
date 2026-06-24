@@ -1,7 +1,7 @@
 import logging
 from typing import Iterator
 
-from app.core.interfaces import LLMRunner, PromptBuilder
+from app.core.interfaces import IntentDetector, LLMRunner, PromptBuilder
 from app.core.models import ChatHistory
 from app.utils.recipe_search import RecipeSearch
 
@@ -17,10 +17,12 @@ class ChatOrchestrator:
     def __init__(
         self,
         recipe_search: RecipeSearch,
+        intent_detector: IntentDetector,
         llm_runner: LLMRunner,
         prompt_builder: PromptBuilder,
     ):
         self._recipe_search = recipe_search
+        self._intent_detector = intent_detector
         self._llm_runner = llm_runner
         self._prompt_builder = prompt_builder
 
@@ -36,8 +38,8 @@ class ChatOrchestrator:
         logger.debug("latest_user_message='%s'", latest_user_message)
 
         # Detect intent
-        intent = self._recipe_search.detect_intent(latest_user_message)
-        logger.debug("detected intent='%s'", intent)
+        intent = self._intent_detector.detect(latest_user_message)
+        logger.debug("detected intent=%s", intent.value)
 
         # Retrieve recipes
         recipes = self._recipe_search.search(

@@ -1,5 +1,7 @@
 import logging
 from typing import List, Optional
+
+from app.core.intent import Intent
 from app.core.interfaces import Embedder, IntentDetector, RecipeRetriever
 from app.core.models import Recipe
 
@@ -10,6 +12,13 @@ class RecipeSearch:
     """
     Deep module that orchestrates recipe search:
     embed query -> detect intent -> retrieve recipes.
+
+    The public interface is a single method:
+        search(query, top_k) -> List[Recipe]
+
+    Intent detection is an internal step; callers that already know
+    the intent (e.g. API endpoints) may pass it via the optional
+    *intent* parameter.
     """
 
     def __init__(
@@ -22,17 +31,15 @@ class RecipeSearch:
         self._intent_detector = intent_detector
         self._retriever = retriever
 
-    def detect_intent(self, query: str) -> str:
-        return self._intent_detector.detect(query)
-
     def search(
-        self, query: str, intent: Optional[str] = None, top_k: int = 5
+        self, query: str, intent: Optional[Intent] = None, top_k: int = 5
     ) -> List[Recipe]:
-        if intent is None:
-            intent = self._intent_detector.detect(query)
-        logger.debug("query='%s' intent='%s'", query, intent)
+        resolved_intent = (
+            intent if intent is not None else self._intent_detector.detect(query)
+        )
+        logger.debug("query='%s' intent=%s", query, resolved_intent.value)
         embedding = self._embedder.embed(query)
         logger.debug("embedding len=%d", len(embedding))
-        results = self._retriever.retrieve(embedding, intent, top_k)
+        results = self._retriever.retrieve(embedding, resolved_intent, top_k)
         logger.debug("results count=%d", len(results))
         return results

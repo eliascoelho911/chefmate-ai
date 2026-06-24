@@ -1,4 +1,6 @@
-from typing import List
+from typing import List, Optional
+
+from app.core.intent import Intent
 from app.core.models import ChatHistory, Recipe
 from app.utils.prompt import _format_recipe_as_markdown
 
@@ -65,20 +67,20 @@ class PromptBuilder:
         ),
     }
 
-    _DETECTED_INTENT_TO_ADDON = {
-        "ingredient_search": "SuggestRecipe",
-        "specific_recipe": "ExpandRecipe",
-        "recipe_generation": "SuggestRecipe",
-        "step_navigation": "InstructionsOnly",
-        "diet_filter": "DietaryPreferences",
-        "nutrition_info": "NutritionInfo",
-        "time_filter": "CookingTimeFilter",
-        "rating_filter": "SuggestRecipe",
-        "unclear": None,
+    _DETECTED_INTENT_TO_ADDON: dict[Intent, Optional[str]] = {
+        Intent.INGREDIENT_SEARCH: "SuggestRecipe",
+        Intent.SPECIFIC_RECIPE: "ExpandRecipe",
+        Intent.RECIPE_GENERATION: "SuggestRecipe",
+        Intent.STEP_NAVIGATION: "InstructionsOnly",
+        Intent.DIET_FILTER: "DietaryPreferences",
+        Intent.NUTRITION_INFO: "NutritionInfo",
+        Intent.TIME_FILTER: "CookingTimeFilter",
+        Intent.RATING_FILTER: "SuggestRecipe",
+        Intent.UNCLEAR: None,
     }
 
     def build_messages(
-        self, chat_history: ChatHistory, intent: str, recipes: List[Recipe]
+        self, chat_history: ChatHistory, intent: Intent, recipes: List[Recipe]
     ) -> List[dict]:
         system_prompt = self._build_system_prompt(intent)
         context_message = self._build_context_message(recipes)
@@ -96,7 +98,7 @@ class PromptBuilder:
                 messages.append({"role": msg.role, "content": msg.content})
         return messages
 
-    def _build_system_prompt(self, intent: str) -> str:
+    def _build_system_prompt(self, intent: Intent) -> str:
         addon_key = self._DETECTED_INTENT_TO_ADDON.get(intent)
         addon = self._INTENT_ADDONS.get(addon_key, "") if addon_key else ""
         return f"{self._BASE_PROMPT}\n{addon}".strip()

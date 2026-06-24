@@ -6,7 +6,8 @@ from app.utils.chat_orchestrator import ChatOrchestrator
 from app.utils.recipe_search import RecipeSearch
 from app.utils.llm_model import LLMRunner
 from app.utils.intent_detector import IntentDetector
-from app.utils.faiss_handler import FAISSHandler
+from app.utils.recipe_repository import RecipeRepository
+from app.utils.vector_index import VectorIndex
 
 
 @dataclass
@@ -21,7 +22,8 @@ class AppContainer:
     llm_runner: LLMRunner
     intent_detector: IntentDetector
     embedder: Embedder
-    faiss_handler: FAISSHandler
+    vector_index: VectorIndex
+    recipe_repository: RecipeRepository
     chat_orchestrator: ChatOrchestrator
 
 
