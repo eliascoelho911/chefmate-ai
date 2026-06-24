@@ -3,6 +3,7 @@ Standalone script to prepare recipe data without needing the FastAPI server runn
 Run this after placing recipes.csv in data/raw/ or let it auto-download from Kaggle.
 """
 
+import argparse
 import os
 import shutil
 import sys
@@ -79,9 +80,52 @@ def download_raw_dataset(raw_path: str) -> None:
     print(f"[INFO] Copied downloaded CSV to: {raw_path}")
 
 
+def faiss_indexes_exist(config: dict) -> bool:
+    """Check whether all three expected FAISS index files already exist."""
+    index_dir = config["paths"]["faiss_index_dir"]
+    expected = [
+        "ingredients_embedding.index",
+        "ingredients_with_quantities_embedding.index",
+        "title_embedding.index",
+    ]
+    return all(os.path.exists(os.path.join(index_dir, f)) for f in expected)
+
+
+def sqlite_db_exists(config: dict) -> bool:
+    """Check whether the SQLite database file already exists."""
+    return os.path.exists(config["paths"]["sqlite_db"])
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Prepare recipe data: clean, embed, build FAISS indexes, and populate SQLite."
+    )
+    parser.add_argument(
+        "--rebuild-indexes",
+        action="store_true",
+        help="Force rebuilding of FAISS indexes even if they already exist.",
+    )
+    parser.add_argument(
+        "--rebuild-db",
+        action="store_true",
+        help="Force rebuilding of the SQLite database even if it already exists.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     config = load_config()
     raw_path = config["paths"]["recipe_data"]
+
+    # Determine what actually needs to be (re)built
+    needs_faiss = not faiss_indexes_exist(config) or args.rebuild_indexes
+    needs_db = not sqlite_db_exists(config) or args.rebuild_db
+
+    if not needs_faiss and not needs_db:
+        print("[INFO] All artifacts exist and no rebuild flags passed. Nothing to do.")
+        print("[SUCCESS] Data preparation complete!")
+        return
 
     download_raw_dataset(raw_path)
 
@@ -94,29 +138,40 @@ def main():
     print("[INFO] Cleaning recipe data...")
     df = clean_recipe_data(df)
 
-    print("[INFO] Generating embeddings (this may take a while)...")
-    df = generate_recipe_embeddings(df, config)
+    # Embeddings are only required when (re)building FAISS indexes
+    if needs_faiss:
+        print("[INFO] Generating embeddings (this may take a while)...")
+        df = generate_recipe_embeddings(df, config)
 
-    print("[INFO] Building FAISS indexes...")
-    build_recipe_faiss_indexes(df, config)
+        print("[INFO] Building FAISS indexes...")
+        build_recipe_faiss_indexes(df, config)
 
-    # Drop embedding columns from DataFrame before saving to SQLite
-    embed_cols = [
-        "ingredients_embedding",
-        "ingredients_with_quantities_embedding",
-        "title_embedding",
-    ]
-    dropped = [c for c in embed_cols if c in df.columns]
-    if dropped:
-        df = df.drop(columns=dropped)
-        print(f"[INFO] Dropped embedding columns from DataFrame: {dropped}")
+        # Drop embedding columns from DataFrame before saving to SQLite
+        embed_cols = [
+            "ingredients_embedding",
+            "ingredients_with_quantities_embedding",
+            "title_embedding",
+        ]
+        dropped = [c for c in embed_cols if c in df.columns]
+        if dropped:
+            df = df.drop(columns=dropped)
+            print(f"[INFO] Dropped embedding columns from DataFrame: {dropped}")
+    else:
+        print("[INFO] FAISS indexes already exist. Skipping embeddings.")
 
     # Save metadata to SQLite
-    db_path = config["paths"]["sqlite_db"]
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    store = RecipeSQLiteStore(db_path)
-    store.insert_recipes(df)
-    store.close()
+    if needs_db:
+        db_path = config["paths"]["sqlite_db"]
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+        if os.path.exists(db_path):
+            os.remove(db_path)
+            print(f"[INFO] Removed existing SQLite database: {db_path}")
+        store = RecipeSQLiteStore(db_path)
+        store.insert_recipes(df)
+        store.close()
+    else:
+        print("[INFO] SQLite database already exists. Skipping.")
 
     print("[SUCCESS] Data preparation complete! You can now start the server with:")
     print("    uvicorn main:app --reload")

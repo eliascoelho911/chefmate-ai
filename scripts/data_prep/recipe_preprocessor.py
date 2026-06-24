@@ -50,6 +50,7 @@ def clean_recipe_data(df: pd.DataFrame) -> pd.DataFrame:
 
     df["recipe_instructions"] = df["recipe_instructions"].apply(parse_r_list_string)
     df["keywords"] = df["keywords"].apply(parse_r_list_string)
+    df["images"] = df["images"].apply(parse_r_list_string)
 
     # Debugging outputs (can be removed in production)
     print("Sample cleaned ingredients:")

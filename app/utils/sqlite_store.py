@@ -75,7 +75,8 @@ def _deserialize_row(row: sqlite3.Row) -> Dict[str, Any]:
         val = row[key]
         if key in _LIST_COLUMNS and isinstance(val, str):
             try:
-                result[key] = json.loads(val)
+                parsed = json.loads(val)
+                result[key] = parsed if isinstance(parsed, list) else []
             except (json.JSONDecodeError, TypeError):
                 result[key] = []
         else:

@@ -23,8 +23,8 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         self._expected_key = api_key or os.getenv("CHEFMATE_API_KEY")
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # Healthcheck is always public
-        if request.url.path == "/health":
+        # Healthcheck and docs are always public
+        if request.url.path in ("/health", "/docs", "/openapi.json", "/redoc"):
             return await call_next(request)
 
         if not self._expected_key:

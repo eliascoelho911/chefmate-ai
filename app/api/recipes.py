@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Security
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import List
 from app.core.container import AppContainer, get_container
 from app.core.intent import Intent
 from app.core.models import Recipe
 
-router = APIRouter()
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+router = APIRouter(dependencies=[Security(api_key_header)])
 
 
 class SearchRequest(BaseModel):
