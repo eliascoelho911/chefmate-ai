@@ -11,7 +11,7 @@ services:
     env_file:
       - .env
     volumes:
-      - chefmate_data:/app/data
+      - ./data:/app/data
       - ./entrypoint.sh:/entrypoint.sh:ro
     deploy:
       resources:

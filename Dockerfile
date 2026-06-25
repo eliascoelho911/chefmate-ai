@@ -32,14 +32,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user/group
-RUN groupadd -r appgroup && useradd -r -g appgroup -u 1001 appuser
+# Create non-root user/group and ensure home directory exists with correct permissions
+RUN groupadd -r appgroup && useradd -r -g appgroup -u 1001 appuser \
+    && mkdir -p /home/appuser/.cache/huggingface \
+    && chown -R appuser:appgroup /home/appuser
 
 WORKDIR /app
 
 # Copy installed Python packages from builder stage
 COPY --from=builder /root/.local /home/appuser/.local
 ENV PATH=/home/appuser/.local/bin:$PATH
+
+# Copy pre-downloaded Hugging Face cache from builder stage
+COPY --from=builder /root/.cache/huggingface /home/appuser/.cache/huggingface
+RUN chown -R appuser:appgroup /home/appuser/.cache
+
+# Set Hugging Face cache environment variable
+ENV HF_HOME=/home/appuser/.cache/huggingface
 
 # Copy application source code
 COPY --chown=appuser:appgroup . .
