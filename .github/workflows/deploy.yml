@@ -51,7 +51,7 @@ jobs:
             chmod +x entrypoint.sh
 
             echo "[INFO] Building Docker image with cache..."
-            docker compose build --no-cache
+            docker compose build
 
             echo "[INFO] Stopping existing container..."
             docker compose down
@@ -62,8 +62,8 @@ jobs:
             echo "[INFO] Docker compose ps after start:"
             docker compose ps -a
 
-            echo "[INFO] Waiting for healthcheck (max 60s)..."
-            for i in {1..30}; do
+            echo "[INFO] Waiting for healthcheck (max 120s)..."
+            for i in {1..60}; do
                 STATUS=$(docker inspect --format='{{.State.Health.Status}}' chefmate-ai 2>/dev/null || echo "starting")
                 if [ "$STATUS" = "healthy" ]; then
                     echo "[SUCCESS] Container is healthy!"
@@ -71,7 +71,7 @@ jobs:
                     docker logs --tail 20 chefmate-ai
                     exit 0
                 fi
-                echo "  ... status: $STATUS (attempt $i/30)"
+                echo "  ... status: $STATUS (attempt $i/60)"
                 sleep 2
             done
 
