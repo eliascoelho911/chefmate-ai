@@ -16,9 +16,24 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          timeout: 60s
+          command_timeout: 15m
+          script_stop: true
           script: |
             set -e
+            echo "[DEBUG] Connected as $(whoami) on $(hostname)"
+            echo "[DEBUG] Working directory: $(pwd)"
+            echo "[DEBUG] Uptime: $(uptime)"
+            echo "[DEBUG] Disk usage:"
+            df -h
+            echo "[DEBUG] Memory usage:"
+            free -h || echo "free not available"
+            echo "[DEBUG] Docker system usage:"
+            docker system df || true
+
             cd /docker/chefmate-ai
+            echo "[INFO] Current git HEAD before pull:"
+            git log --oneline -1
 
             echo "[INFO] Fetching latest changes from origin/main..."
             git fetch origin main
@@ -26,11 +41,17 @@ jobs:
             echo "[INFO] Resetting working tree to match origin/main..."
             git reset --hard origin/main
 
+            echo "[INFO] New git HEAD after pull:"
+            git log --oneline -1
+
+            echo "[INFO] Listing tracked files:"
+            ls -lah
+
             echo "[INFO] Ensuring entrypoint.sh is executable..."
             chmod +x entrypoint.sh
 
             echo "[INFO] Building Docker image with cache..."
-            docker compose build
+            docker compose build --no-cache
 
             echo "[INFO] Stopping existing container..."
             docker compose down
@@ -38,13 +59,16 @@ jobs:
             echo "[INFO] Starting container..."
             docker compose up -d
 
+            echo "[INFO] Docker compose ps after start:"
+            docker compose ps -a
+
             echo "[INFO] Waiting for healthcheck (max 60s)..."
             for i in {1..30}; do
                 STATUS=$(docker inspect --format='{{.State.Health.Status}}' chefmate-ai 2>/dev/null || echo "starting")
                 if [ "$STATUS" = "healthy" ]; then
                     echo "[SUCCESS] Container is healthy!"
                     echo "[INFO] Recent logs:"
-                    docker logs --tail 10 chefmate-ai
+                    docker logs --tail 20 chefmate-ai
                     exit 0
                 fi
                 echo "  ... status: $STATUS (attempt $i/30)"
@@ -52,8 +76,10 @@ jobs:
             done
 
             echo "[ERROR] Container did not become healthy in time"
-            echo "[INFO] Last 30 log lines:"
-            docker logs --tail 30 chefmate-ai
+            echo "[INFO] Docker inspect health info:"
+            docker inspect --format='{{json .State.Health}}' chefmate-ai 2>/dev/null || echo "No health info"
+            echo "[INFO] Last 50 log lines:"
+            docker logs --tail 50 chefmate-ai
             exit 1
 
       - name: Debug container logs on failure
@@ -63,9 +89,35 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          timeout: 60s
+          command_timeout: 10m
+          script_stop: false
           script: |
             echo "====== DEPLOY FAILED — DEBUG INFO ======"
-            echo "--- Container status ---"
+            echo "--- System info ---"
+            whoami
+            hostname
+            uptime
+            df -h
+            free -h || true
+            echo "--- Docker status ---"
+            docker system df || true
+            docker ps -a || true
+            echo "--- Docker compose status ---"
+            cd /docker/chefmate-ai && docker compose ps -a || true
+            echo "--- Container inspect ---"
+            docker inspect chefmate-ai 2>/dev/null || echo "Container not found"
+            echo "--- Container health ---"
             docker inspect --format='Status: {{.State.Status}} | Health: {{.State.Health.Status}}' chefmate-ai 2>/dev/null || echo "Container not found"
-            echo "--- Last 50 log lines ---"
-            docker logs --tail 50 chefmate-ai 2>/dev/null || echo "No logs available"
+            echo "--- Full container logs ---"
+            docker logs --tail 100 chefmate-ai 2>/dev/null || echo "No logs available"
+            echo "--- Docker compose logs ---"
+            cd /docker/chefmate-ai && docker compose logs --tail 100 || true
+            echo "--- Git status on server ---"
+            cd /docker/chefmate-ai && git status || true
+            cd /docker/chefmate-ai && git log --oneline -3 || true
+            echo "--- Docker images ---"
+            docker images || true
+            echo "--- Docker volumes ---"
+            docker volume ls || true
+            echo "====== END DEBUG INFO ======"
