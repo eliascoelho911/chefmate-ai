@@ -40,7 +40,10 @@ class IngredientTranslator:
         "Translate the given food ingredients from Portuguese (pt-BR) to English. "
         "Return ONLY a JSON object mapping each original term to its English translation. "
         "Use common culinary names. If a term is already in English, keep it. "
-        'Example: {"frango": "chicken", "arroz": "rice"}'
+        "IMPORTANT: Prefer generic, broad ingredient terms that are most likely to appear in recipe indexes. "
+        "Avoid overly specific cuts or preparations. For example, use 'chicken' instead of 'chicken breast', "
+        "'rice' instead of 'brown rice', and 'broccoli' instead of 'broccoli florets'. "
+        'Example: {"frango": "chicken", "arroz": "rice", "peito de frango": "chicken"}'
     )
 
     def __init__(
