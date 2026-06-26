@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Security, HTTPException
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import List
@@ -7,6 +9,8 @@ from app.core.intent import Intent
 from app.core.models import Recipe
 from app.utils.ingredient_translator import TranslationError
 from app.utils.recipe_translator import RecipeTranslationError
+
+logger = logging.getLogger(__name__)
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -68,7 +72,8 @@ def suggest_by_ingredients(
     try:
         translated = container.ingredient_translator.translate_batch(required)
     except TranslationError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        logger.warning("Ingredient translation failed, using original terms: %s", exc)
+        translated = required
 
     results = container.recipe_search.search(
         query,
@@ -80,6 +85,6 @@ def suggest_by_ingredients(
     try:
         results = container.recipe_translator.translate_recipes(results)
     except RecipeTranslationError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        logger.warning("Recipe translation failed, returning English recipes: %s", exc)
 
     return SuggestByIngredientsResponse(results=results)

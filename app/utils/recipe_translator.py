@@ -15,9 +15,11 @@ from app.core.models import Recipe
 logger = logging.getLogger(__name__)
 
 # Overhead fixo do prompt JSON (chaves, vírgulas, espaços, etc.)
-_JSON_OVERHEAD_TOKENS = 200
+_JSON_OVERHEAD_TOKENS = 512
+# Fator de expansão estimado: tradução pt-BR tende a ser ~1.3x o tamanho do en
+_OUTPUT_TOKEN_FACTOR = 1.5
 # Tamanho máximo de receitas por chunk para evitar respostas longas e instáveis
-_MAX_RECIPES_PER_CHUNK = 3
+_MAX_RECIPES_PER_CHUNK = 2
 
 
 class RecipeTranslationError(Exception):
@@ -94,8 +96,11 @@ class RecipeTranslator:
         messages = [system_msg, user_msg]
 
         # max_tokens dinâmico: evita truncamento para listas grandes
-        estimated_tokens = self._estimate_tokens(payload) + _JSON_OVERHEAD_TOKENS
-        max_tokens = max(512, estimated_tokens)
+        estimated_input_tokens = self._estimate_tokens(payload)
+        max_tokens = max(
+            1024,
+            int(estimated_input_tokens * _OUTPUT_TOKEN_FACTOR) + _JSON_OVERHEAD_TOKENS,
+        )
 
         try:
             logger.info(
@@ -117,20 +122,16 @@ class RecipeTranslator:
 
             finish_reason = choice.finish_reason
             if finish_reason == "length":
-                logger.error(
+                logger.warning(
                     "LLM response truncated due to max_tokens (finish_reason=length). "
-                    "Consider reducing _MAX_RECIPES_PER_CHUNK."
-                )
-                raise RecipeTranslationError(
-                    "Recipe translation response was truncated by token limit."
+                    "Attempting to parse partial response."
                 )
 
             return self._parse_response(content, recipes)
         except Exception as exc:
             logger.error("OpenRouter recipe translation failed: %s", exc)
-            raise RecipeTranslationError(
-                "Unable to translate recipes at this time. Please try again later."
-            ) from exc
+            logger.warning("Returning untranslated recipes due to error")
+            return recipes
 
     @staticmethod
     def _build_payload(recipes: List[Recipe]) -> List[dict]:
@@ -161,24 +162,25 @@ class RecipeTranslator:
             cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
             cleaned = re.sub(r"\s*```$", "", cleaned)
 
+        data: List[dict] = []
         try:
-            data = json.loads(cleaned)
-        except json.JSONDecodeError as exc:
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError:
             logger.error("Failed to parse recipe translation JSON: %s", content)
             data = self._extract_array_from_truncated_json(content)
-            if not data:
-                raise RecipeTranslationError(
-                    "Invalid recipe translation response from LLM."
-                ) from exc
-
-        if not isinstance(data, list):
-            # Alguns modelos podem retornar {"recipes": [...]}
-            if isinstance(data, dict) and "recipes" in data:
-                data = data["recipes"]
+        else:
+            if isinstance(parsed, list):
+                data = parsed
+            elif isinstance(parsed, dict) and "recipes" in parsed:
+                data = parsed["recipes"]
             else:
-                raise RecipeTranslationError(
-                    "Recipe translation response is not a JSON array."
+                logger.error(
+                    "Recipe translation response is not a JSON array or object with 'recipes' key."
                 )
+
+        if not data:
+            logger.warning("No translations parsed; returning original recipes")
+            return original_recipes
 
         if len(data) != len(original_recipes):
             logger.warning(
@@ -228,15 +230,34 @@ class RecipeTranslator:
         Tenta extrair objetos JSON de um array possivelmente truncado.
         Último recurso quando json.loads falha.
         """
-        # Tenta encontrar um array JSON
-        match = re.search(r"\[.*?\]", text, re.DOTALL)
+        # 1. Tenta encontrar um array JSON completo
+        match = re.search(r"\[.*\]", text, re.DOTALL)
         if match:
+            array_text = match.group(0)
             try:
-                return json.loads(match.group(0))
+                return json.loads(array_text)
             except json.JSONDecodeError:
                 pass
 
-        # Fallback: tenta extrair objetos individuais
+            # 2. Tenta fechar o array se estiver truncado no final
+            fixed = array_text.rstrip()
+            if not fixed.endswith("]"):
+                fixed = fixed + "]"
+            try:
+                return json.loads(fixed)
+            except json.JSONDecodeError:
+                pass
+
+            # 3. Tenta remover o último objeto incompleto e fechar o array
+            last_comma = fixed.rfind(",", 0, len(fixed) - 1)
+            if last_comma > 0:
+                trimmed = fixed[:last_comma] + "]"
+                try:
+                    return json.loads(trimmed)
+                except json.JSONDecodeError:
+                    pass
+
+        # 4. Fallback: tenta extrair objetos individuais completos
         objects = re.findall(r"\{[^{}]*\}", text)
         if objects:
             parsed = []

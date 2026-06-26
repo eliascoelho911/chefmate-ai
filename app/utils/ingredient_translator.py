@@ -13,9 +13,9 @@ from openai.types.chat import (
 logger = logging.getLogger(__name__)
 
 # Tokens estimados por ingrediente (pt + en + JSON overhead) — margem segura
-_TOKENS_PER_INGREDIENT = 30
+_TOKENS_PER_INGREDIENT = 40
 # Overhead fixo do prompt JSON (chaves, vírgulas, espaços, etc.)
-_JSON_OVERHEAD_TOKENS = 100
+_JSON_OVERHEAD_TOKENS = 200
 # Tamanho máximo de um chunk para evitar respostas longas e instáveis
 _MAX_CHUNK_SIZE = 10
 
@@ -129,7 +129,7 @@ class IngredientTranslator:
         estimated_tokens = (
             len(ingredients) * _TOKENS_PER_INGREDIENT + _JSON_OVERHEAD_TOKENS
         )
-        max_tokens = max(256, estimated_tokens)
+        max_tokens = max(384, estimated_tokens)
 
         try:
             logger.info(
@@ -152,20 +152,16 @@ class IngredientTranslator:
             # Detectar truncamento por max_tokens (causa raiz do JSON inválido)
             finish_reason = choice.finish_reason
             if finish_reason == "length":
-                logger.error(
+                logger.warning(
                     "LLM response truncated due to max_tokens (finish_reason=length). "
-                    "Consider increasing _TOKENS_PER_INGREDIENT or reducing _MAX_CHUNK_SIZE."
-                )
-                raise TranslationError(
-                    "Translation response was truncated by token limit."
+                    "Attempting to parse partial response."
                 )
 
             return self._parse_response(content, ingredients)
         except Exception as exc:
             logger.error("OpenRouter translation failed: %s", exc)
-            raise TranslationError(
-                "Unable to translate ingredients at this time. Please try again later."
-            ) from exc
+            logger.warning("Returning untranslated ingredients due to error")
+            return {pt: pt for pt in ingredients}
 
     def _parse_response(self, content: str, expected: List[str]) -> dict[str, str]:
         # Extract JSON from markdown code fences if present
@@ -174,19 +170,22 @@ class IngredientTranslator:
             cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
             cleaned = re.sub(r"\s*```$", "", cleaned)
 
+        data: dict = {}
         try:
-            data = json.loads(cleaned)
-        except json.JSONDecodeError as exc:
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError:
             logger.error("Failed to parse translation JSON: %s", content)
             # Fallback de última instância: tentar extrair pares com regex
             data = self._extract_pairs_from_truncated_json(content)
-            if not data:
-                raise TranslationError(
-                    "Invalid translation response from LLM."
-                ) from exc
+        else:
+            if isinstance(parsed, dict):
+                data = parsed
+            else:
+                logger.error("Translation response is not a JSON object.")
 
-        if not isinstance(data, dict):
-            raise TranslationError("Translation response is not a JSON object.")
+        if not data:
+            logger.warning("No translations parsed; returning original ingredients")
+            return {pt: pt for pt in expected}
 
         result: dict[str, str] = {}
         for pt in expected:
