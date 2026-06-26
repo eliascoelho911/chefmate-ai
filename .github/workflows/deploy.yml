@@ -26,6 +26,9 @@ jobs:
             echo "[INFO] Resetting working tree to match origin/main..."
             git reset --hard origin/main
 
+            echo "[INFO] Ensuring entrypoint.sh is executable..."
+            chmod +x entrypoint.sh
+
             echo "[INFO] Building Docker image with cache..."
             docker compose build
 
