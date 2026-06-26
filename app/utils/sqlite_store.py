@@ -40,12 +40,6 @@ CREATE TABLE IF NOT EXISTS recipes (
 );
 CREATE INDEX IF NOT EXISTS idx_name ON recipes(name);
 
-CREATE TABLE IF NOT EXISTS ingredient_translations (
-    pt TEXT PRIMARY KEY,
-    en TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS ingredient_index (
     ingredient TEXT NOT NULL,
     faiss_index INTEGER NOT NULL,
@@ -181,24 +175,6 @@ class RecipeSQLiteStore:
     def count(self) -> int:
         cursor = self.conn.execute("SELECT COUNT(*) FROM recipes")
         return cursor.fetchone()[0]
-
-    # ------------------------------------------------------------------
-    # Ingredient translation cache
-    # ------------------------------------------------------------------
-
-    def get_translation(self, pt: str) -> Optional[str]:
-        cursor = self.conn.execute(
-            "SELECT en FROM ingredient_translations WHERE pt = ?", (pt,)
-        )
-        row = cursor.fetchone()
-        return row[0] if row else None
-
-    def save_translation(self, pt: str, en: str) -> None:
-        self.conn.execute(
-            "INSERT OR REPLACE INTO ingredient_translations (pt, en) VALUES (?, ?)",
-            (pt, en),
-        )
-        self.conn.commit()
 
     # ------------------------------------------------------------------
     # Ingredient inverted index

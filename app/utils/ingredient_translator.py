@@ -29,7 +29,7 @@ class TranslationError(Exception):
 class IngredientTranslator:
     """
     Translates culinary ingredients from Portuguese (pt-BR) to English using
-    OpenRouter, with SQLite-backed caching.
+    OpenRouter.
 
     Interface:
         translate_batch(ingredients: List[str]) -> List[str]
@@ -50,11 +50,9 @@ class IngredientTranslator:
         self,
         client: OpenAI,
         model: str,
-        cache_store,
     ):
         self._client = client
         self._model = model
-        self._cache = cache_store
 
     def translate_batch(self, ingredients: List[str]) -> List[str]:
         if not ingredients:
@@ -63,30 +61,23 @@ class IngredientTranslator:
         # Deduplicate while preserving order
         unique = list(dict.fromkeys(ingredients))
         to_translate: List[str] = []
-        cached: dict[str, str] = {}
 
         for ing in unique:
             ing_clean = ing.strip().lower()
             if not ing_clean:
                 continue
-            cached_en = self._cache.get_translation(ing_clean)
-            if cached_en is not None:
-                cached[ing_clean] = cached_en
-            else:
-                to_translate.append(ing_clean)
+            to_translate.append(ing_clean)
 
+        translated: dict[str, str] = {}
         if to_translate:
             translated = self._translate_in_chunks(to_translate)
-            for pt, en in translated.items():
-                self._cache.save_translation(pt, en)
-                cached[pt] = en
 
         # Map back to original input order and casing (but use lowercase key)
         result: List[str] = []
         for ing in ingredients:
             key = ing.strip().lower()
-            if key in cached:
-                result.append(cached[key])
+            if key in translated:
+                result.append(translated[key])
             else:
                 # Should not happen unless LLM omitted a key; fallback to original
                 result.append(ing)

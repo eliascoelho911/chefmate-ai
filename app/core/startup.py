@@ -59,7 +59,6 @@ def init_dependencies():
     ingredient_translator = IngredientTranslator(
         client=translator_client,
         model=fast_model,
-        cache_store=sqlite_store,
     )
     logging.info("IngredientTranslator initialized with model=%s", fast_model)
 
