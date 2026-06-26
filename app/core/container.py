@@ -6,6 +6,7 @@ from app.utils.chat_orchestrator import ChatOrchestrator
 from app.utils.ingredient_translator import IngredientTranslator
 from app.utils.recipe_search import RecipeSearch
 from app.utils.llm_model import LLMRunner
+from app.utils.recipe_translator import RecipeTranslator
 from app.utils.intent_detector import IntentDetector
 from app.utils.recipe_repository import RecipeRepository
 from app.utils.vector_index import VectorIndex
@@ -27,6 +28,7 @@ class AppContainer:
     recipe_repository: RecipeRepository
     chat_orchestrator: ChatOrchestrator
     ingredient_translator: IngredientTranslator
+    recipe_translator: RecipeTranslator
 
 
 # Module-level singleton. Set once at startup; read-only thereafter.

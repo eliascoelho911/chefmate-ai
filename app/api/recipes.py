@@ -6,6 +6,7 @@ from app.core.container import AppContainer, get_container
 from app.core.intent import Intent
 from app.core.models import Recipe
 from app.utils.ingredient_translator import TranslationError
+from app.utils.recipe_translator import RecipeTranslationError
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -75,4 +76,10 @@ def suggest_by_ingredients(
         top_k=request.top_k,
         required_ingredients=translated,
     )
+
+    try:
+        results = container.recipe_translator.translate_recipes(results)
+    except RecipeTranslationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
     return SuggestByIngredientsResponse(results=results)

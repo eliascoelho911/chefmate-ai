@@ -14,6 +14,7 @@ from app.utils.prompt_builder import PromptBuilder
 from app.utils.recipe_repository import RecipeRepository
 from app.utils.recipe_retriever import FAISSRecipeRetriever
 from app.utils.recipe_search import RecipeSearch
+from app.utils.recipe_translator import RecipeTranslator
 from app.utils.sqlite_store import RecipeSQLiteStore
 from app.utils.vector_index import VectorIndex
 
@@ -62,6 +63,12 @@ def init_dependencies():
     )
     logging.info("IngredientTranslator initialized with model=%s", fast_model)
 
+    recipe_translator = RecipeTranslator(
+        client=translator_client,
+        model=fast_model,
+    )
+    logging.info("RecipeTranslator initialized with model=%s", fast_model)
+
     embedder = SentenceTransformerEmbedder(embedding_model)
     retriever = FAISSRecipeRetriever(
         vector_index=vector_index,
@@ -94,6 +101,7 @@ def init_dependencies():
         recipe_repository=recipe_repository,
         chat_orchestrator=chat_orchestrator,
         ingredient_translator=ingredient_translator,
+        recipe_translator=recipe_translator,
     )
     set_container(container)
     logging.info("AppContainer initialized and set")
