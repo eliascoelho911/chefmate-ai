@@ -45,6 +45,8 @@ class RecipeTranslator:
         "Return ONLY a JSON array where each element corresponds to a recipe, "
         "containing the translated fields: name, ingredients_cleaned, "
         "ingredients_with_quantities, recipe_instructions, and category. "
+        "IMPORTANT: You must ALWAYS translate and include the 'name' field for every recipe. "
+        "Do not omit or leave the recipe name in English. "
         "Do not translate numeric values, units, or ratings."
     )
 
