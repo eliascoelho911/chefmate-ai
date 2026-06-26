@@ -11,7 +11,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./data:/app/data
+      - chefmate-ai_chefmate_data:/app/data
       - ./entrypoint.sh:/entrypoint.sh:ro
     deploy:
       resources:
@@ -30,4 +30,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  chefmate_data:
+  chefmate-ai_chefmate_data:
+    external: true
