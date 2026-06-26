@@ -4,8 +4,11 @@ set -e
 PROJECT_DIR="/docker/chefmate-ai"
 cd "$PROJECT_DIR"
 
-echo "[INFO] Pulling latest changes from origin/main..."
-git pull origin main
+echo "[INFO] Fetching latest changes from origin/main..."
+git fetch origin main
+
+echo "[INFO] Resetting working tree to match origin/main..."
+git reset --hard origin/main
 
 echo "[INFO] Building Docker image with cache..."
 docker compose build
