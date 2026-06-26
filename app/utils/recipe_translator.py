@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
 
 from openai import OpenAI
@@ -71,15 +72,19 @@ class RecipeTranslator:
             _MAX_RECIPES_PER_CHUNK,
         )
 
+        chunks = [
+            recipes[i * _MAX_RECIPES_PER_CHUNK : (i + 1) * _MAX_RECIPES_PER_CHUNK]
+            for i in range(num_chunks)
+        ]
+
         translated: List[Recipe] = []
-        for i in range(num_chunks):
-            start = i * _MAX_RECIPES_PER_CHUNK
-            end = start + _MAX_RECIPES_PER_CHUNK
-            chunk = recipes[start:end]
-            logger.info(
-                "Translating chunk %d/%d (%d recipes)", i + 1, num_chunks, len(chunk)
-            )
-            translated.extend(self._translate_chunk(chunk))
+        if num_chunks == 1:
+            translated.extend(self._translate_chunk(chunks[0]))
+        else:
+            logger.info("Translating %d chunks in parallel", num_chunks)
+            with ThreadPoolExecutor(max_workers=num_chunks) as executor:
+                for chunk_result in executor.map(self._translate_chunk, chunks):
+                    translated.extend(chunk_result)
 
         return translated
 
