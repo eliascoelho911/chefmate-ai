@@ -16,10 +16,6 @@ from app.core.models import Recipe
 
 logger = logging.getLogger(__name__)
 
-# Overhead fixo do prompt JSON (chaves, vírgulas, espaços, etc.)
-_JSON_OVERHEAD_TOKENS = 512
-# Fator de expansão estimado: tradução pt-BR tende a ser ~1.3x o tamanho do en
-_OUTPUT_TOKEN_FACTOR = 1.5
 # Tamanho máximo de receitas por chunk para evitar respostas longas e instáveis
 _MAX_RECIPES_PER_CHUNK = 2
 
@@ -118,25 +114,16 @@ class RecipeTranslator:
         }
         messages = [system_msg, user_msg]
 
-        # max_tokens dinâmico: evita truncamento para listas grandes
-        estimated_input_tokens = self._estimate_tokens(payload)
-        max_tokens = max(
-            1024,
-            int(estimated_input_tokens * _OUTPUT_TOKEN_FACTOR) + _JSON_OVERHEAD_TOKENS,
-        )
-
         try:
             logger.info(
-                "Translating %d recipes via OpenRouter model=%s (max_tokens=%d)",
+                "Translating %d recipes via OpenRouter model=%s",
                 len(recipes),
                 self._model,
-                max_tokens,
             )
             t_llm_start = time.perf_counter()
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,
-                max_tokens=max_tokens,
                 temperature=0.1,
                 top_p=0.9,
                 response_format={"type": "json_object"},
@@ -178,12 +165,6 @@ class RecipeTranslator:
                 }
             )
         return payload
-
-    @staticmethod
-    def _estimate_tokens(payload: List[dict]) -> int:
-        # Heurística simples: ~4 chars/token em média para inglês
-        text = json.dumps(payload, ensure_ascii=False)
-        return len(text) // 4
 
     def _parse_response(
         self, content: str, original_recipes: List[Recipe]

@@ -63,14 +63,67 @@ This script cleans the CSV, generates sentence-transformer embeddings, serialize
 
 ## Testing
 
-- There are **no automated tests** in the repo.
-- Manual smoke test for `/recipes/suggest-by-ingredients`:
-  ```bash
-  curl -X POST http://localhost:8000/recipes/suggest-by-ingredients \
-    -H "Content-Type: application/json" \
-    -H "X-API-Key: $CHEFMATE_API_KEY" \
-    --data-raw '{"proteinas":["chicken"],"carboidratos":["rice"],"legumes":["broccoli"]}'
-  ```
+### Automated Integration Tests — IngredientTranslator
+
+The repo now contains **real integration tests** for `app/utils/ingredient_translator.py` that hit the live OpenRouter API. They are located at:
+
+```
+tests/test_ingredient_translator.py
+```
+
+#### What the tests cover
+
+| Suite | Description |
+|-------|-------------|
+| `TestSimpleIngredients` | Direct translations (e.g. "frango" → "chicken"). |
+| `TestNormalization` | Generalized translations when `generalize=True` (e.g. "peito de frango" → "chicken", not "chicken breast"). |
+| `TestLiteralTranslation` | Specific translations when `generalize=False` (e.g. "peito de frango" → "chicken breast"). |
+| `TestBatchBehavior` | Deduplication, order preservation, and English pass-through. |
+| `TestEdgeCases` | Empty lists, whitespace-only items. |
+
+Each test run creates a **unique log file** under `tests/logs/` (timestamped) with a simplified, one-line-per-test format showing input, output, elapsed time, parse success, and validity:
+
+```
+2026-06-27 14:18:12 | [simple_frango] parse=OK valid=OK | in=frango | out=chicken | 1205ms | notes=
+```
+
+#### Running the tests
+
+```bash
+# 1. Ensure the virtual environment is active and dependencies are installed
+.venv\Scripts\activate          # Windows
+source .venv/bin/activate       # macOS/Linux
+
+pip install -r requirements.txt pytest
+
+# 2. The tests require a valid OPENROUTER_API_KEY in your .env
+#    (they will skip automatically if the key is missing)
+
+# 3. Run all translator tests
+pytest tests/test_ingredient_translator.py -v
+
+# 4. Run only simple ingredient tests
+pytest tests/test_ingredient_translator.py -v -k "TestSimpleIngredients"
+
+# 5. Run only normalization (generalization) tests
+pytest tests/test_ingredient_translator.py -v -k "TestNormalization"
+```
+
+#### Interpreting results
+
+- **`parse=OK`** — The LLM returned valid JSON and no internal warning/fallback was triggered.
+- **`parse=FAIL`** — The response was truncated, malformed, or an exception occurred; the translator fell back to returning the original term.
+- **`valid=OK`** — The translated output matched the test assertion (substring check or exact match).
+- **`valid=FAIL`** — The assertion failed (e.g. "peito de frango" returned "chicken breast" when `generalize=True` was expected).
+
+### Manual smoke test for `/recipes/search`
+
+```bash
+curl -X POST http://localhost:8000/recipes/search \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $CHEFMATE_API_KEY" \
+  --data-raw '{"intent":"ingredient_search","query":["chicken","rice","broccoli"]}'
+```
 
 ## Startup Dependency Chain
 

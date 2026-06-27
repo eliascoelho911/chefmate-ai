@@ -13,10 +13,6 @@ from openai.types.chat import (
 
 logger = logging.getLogger(__name__)
 
-# Tokens estimados por ingrediente (pt + en + JSON overhead) — margem segura
-_TOKENS_PER_INGREDIENT = 40
-# Overhead fixo do prompt JSON (chaves, vírgulas, espaços, etc.)
-_JSON_OVERHEAD_TOKENS = 200
 # Tamanho máximo de um chunk para evitar respostas longas e instáveis
 _MAX_CHUNK_SIZE = 10
 
@@ -47,6 +43,17 @@ class IngredientTranslator:
         'Example: {"frango": "chicken", "arroz": "rice", "peito de frango": "chicken"}'
     )
 
+    _SYSTEM_PROMPT_LITERAL = (
+        "You are a culinary translation assistant. "
+        "Translate the given food ingredients from Portuguese (pt-BR) to English. "
+        "Return ONLY a JSON object mapping each original term to its English translation. "
+        "Use common culinary names. If a term is already in English, keep it. "
+        "IMPORTANT: Preserve the specific meaning of each term. Do not generalize. "
+        "For example, use 'chicken breast' for 'peito de frango', 'brown rice' for 'arroz integral', "
+        "and 'broccoli florets' for 'floretes de brócolis'. "
+        'Example: {"peito de frango": "chicken breast", "arroz": "rice", "floretes de brócolis": "broccoli florets"}'
+    )
+
     def __init__(
         self,
         client: OpenAI,
@@ -55,7 +62,9 @@ class IngredientTranslator:
         self._client = client
         self._model = model
 
-    def translate_batch(self, ingredients: List[str]) -> List[str]:
+    def translate_batch(
+        self, ingredients: List[str], generalize: bool = True
+    ) -> List[str]:
         t_start = time.perf_counter()
         if not ingredients:
             return []
@@ -72,7 +81,7 @@ class IngredientTranslator:
 
         translated: dict[str, str] = {}
         if to_translate:
-            translated = self._translate_in_chunks(to_translate)
+            translated = self._translate_in_chunks(to_translate, generalize=generalize)
 
         # Map back to original input order and casing (but use lowercase key)
         result: List[str] = []
@@ -93,14 +102,16 @@ class IngredientTranslator:
         )
         return result
 
-    def _translate_in_chunks(self, ingredients: List[str]) -> dict[str, str]:
+    def _translate_in_chunks(
+        self, ingredients: List[str], generalize: bool = True
+    ) -> dict[str, str]:
         """
         Divide ingredientes em chunks para evitar respostas truncadas
         por max_tokens. Chunks menores = maior confiabilidade de JSON válido.
         """
         total = len(ingredients)
         if total <= _MAX_CHUNK_SIZE:
-            return self._call_llm(ingredients)
+            return self._call_llm(ingredients, generalize=generalize)
 
         num_chunks = math.ceil(total / _MAX_CHUNK_SIZE)
         logger.info(
@@ -118,16 +129,20 @@ class IngredientTranslator:
             logger.info(
                 "Translating chunk %d/%d (%d items)", i + 1, num_chunks, len(chunk)
             )
-            chunk_result = self._call_llm(chunk)
+            chunk_result = self._call_llm(chunk, generalize=generalize)
             merged.update(chunk_result)
 
         return merged
 
-    def _call_llm(self, ingredients: List[str]) -> dict[str, str]:
+    def _call_llm(
+        self, ingredients: List[str], generalize: bool = True
+    ) -> dict[str, str]:
         payload = {pt: pt for pt in ingredients}
         system_msg: ChatCompletionSystemMessageParam = {
             "role": "system",
-            "content": self._SYSTEM_PROMPT,
+            "content": self._SYSTEM_PROMPT
+            if generalize
+            else self._SYSTEM_PROMPT_LITERAL,
         }
         user_msg: ChatCompletionUserMessageParam = {
             "role": "user",
@@ -135,24 +150,17 @@ class IngredientTranslator:
         }
         messages = [system_msg, user_msg]
 
-        # max_tokens dinâmico: evita truncamento para listas grandes
-        estimated_tokens = (
-            len(ingredients) * _TOKENS_PER_INGREDIENT + _JSON_OVERHEAD_TOKENS
-        )
-        max_tokens = max(384, estimated_tokens)
-
         try:
             logger.info(
-                "Translating %d ingredients via OpenRouter model=%s (max_tokens=%d)",
+                "Translating %d ingredients via OpenRouter model=%s (generalize=%s)",
                 len(ingredients),
                 self._model,
-                max_tokens,
+                generalize,
             )
             t_llm_start = time.perf_counter()
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,
-                max_tokens=max_tokens,
                 temperature=0.1,
                 top_p=0.9,
                 response_format={"type": "json_object"},

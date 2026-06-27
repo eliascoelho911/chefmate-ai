@@ -13,6 +13,7 @@ from app.utils.llm_model import LLMRunner
 from app.utils.prompt_builder import PromptBuilder
 from app.utils.recipe_repository import RecipeRepository
 from app.utils.recipe_retriever import FAISSRecipeRetriever
+from app.utils.ingredient_search_service import IngredientSearchService
 from app.utils.recipe_search import RecipeSearch
 from app.utils.recipe_translator import RecipeTranslator
 from app.utils.sqlite_store import RecipeSQLiteStore
@@ -80,6 +81,13 @@ def init_dependencies():
     )
     logging.info("RecipeSearch initialized")
 
+    ingredient_search_service = IngredientSearchService(
+        recipe_search=recipe_search,
+        ingredient_translator=ingredient_translator,
+        recipe_translator=recipe_translator,
+    )
+    logging.info("IngredientSearchService initialized")
+
     prompt_builder = PromptBuilder()
 
     chat_orchestrator = ChatOrchestrator(
@@ -101,6 +109,7 @@ def init_dependencies():
         chat_orchestrator=chat_orchestrator,
         ingredient_translator=ingredient_translator,
         recipe_translator=recipe_translator,
+        ingredient_search_service=ingredient_search_service,
     )
     set_container(container)
     logging.info("AppContainer initialized and set")

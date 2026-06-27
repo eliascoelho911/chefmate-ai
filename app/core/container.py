@@ -4,6 +4,7 @@ from typing import Optional
 from app.core.interfaces import Embedder
 from app.utils.chat_orchestrator import ChatOrchestrator
 from app.utils.ingredient_translator import IngredientTranslator
+from app.utils.ingredient_search_service import IngredientSearchService
 from app.utils.recipe_search import RecipeSearch
 from app.utils.llm_model import LLMRunner
 from app.utils.recipe_translator import RecipeTranslator
@@ -29,6 +30,7 @@ class AppContainer:
     chat_orchestrator: ChatOrchestrator
     ingredient_translator: IngredientTranslator
     recipe_translator: RecipeTranslator
+    ingredient_search_service: IngredientSearchService
 
 
 # Module-level singleton. Set once at startup; read-only thereafter.

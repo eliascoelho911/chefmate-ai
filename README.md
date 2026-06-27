@@ -316,14 +316,14 @@ To ensure Chefmate AI backend is working correctly, follow these steps for basic
     uvicorn main:app --reload
     ```
 
-- Try endpoint: `/recipes/suggest-by-ingredients`
+- Try endpoint: `/recipes/search`
 
 - Test a basic ingredients POST request:
     ```bash
-    curl -X POST http://localhost:8000/recipes/suggest-by-ingredients \
+    curl -X POST http://localhost:8000/recipes/search \
       -H "Content-Type: application/json" \
       -H "X-API-Key: $CHEFMATE_API_KEY" \
-      --data-raw '{"proteinas":["chicken"],"carboidratos":["rice"],"legumes":["broccoli"]}'
+      --data-raw '{"intent":"ingredient_search","query":["chicken","rice","broccoli"]}'
     ```
 
 > Full automated tests will be added in future version.
