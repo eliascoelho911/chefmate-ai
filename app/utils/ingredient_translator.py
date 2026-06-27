@@ -11,6 +11,8 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 
+from app.utils.translation_cache import InMemoryTranslationCache, TranslationCache
+
 logger = logging.getLogger(__name__)
 
 # Tamanho máximo de um chunk para evitar respostas longas e instáveis
@@ -26,10 +28,10 @@ class TranslationError(Exception):
 class IngredientTranslator:
     """
     Translates culinary ingredients from Portuguese (pt-BR) to English using
-    OpenRouter.
+    OpenRouter, with optional caching for repeated terms.
 
     Interface:
-        translate_batch(ingredients: List[str]) -> List[str]
+        translate_batch(ingredients: List[str], generalize: bool = True) -> List[str]
     """
 
     _SYSTEM_PROMPT = (
@@ -58,9 +60,11 @@ class IngredientTranslator:
         self,
         client: OpenAI,
         model: str,
+        cache: Optional[TranslationCache] = None,
     ):
         self._client = client
         self._model = model
+        self._cache = cache or InMemoryTranslationCache()
 
     def translate_batch(
         self, ingredients: List[str], generalize: bool = True
@@ -69,47 +73,79 @@ class IngredientTranslator:
         if not ingredients:
             return []
 
-        # Deduplicate while preserving order
-        unique = list(dict.fromkeys(ingredients))
-        to_translate: List[str] = []
-
-        for ing in unique:
-            ing_clean = ing.strip().lower()
-            if not ing_clean:
+        # 1. Normalise and deduplicate while preserving order
+        unique: List[str] = []
+        seen: set[str] = set()
+        for ing in ingredients:
+            key = ing.strip().lower()
+            if not key:
                 continue
-            to_translate.append(ing_clean)
+            if key not in seen:
+                seen.add(key)
+                unique.append(key)
 
-        translated: dict[str, str] = {}
+        # 2. Partition into cache hits / misses
+        cached: dict[str, str] = {}
+        to_translate: List[str] = []
+        for term in unique:
+            hit = self._cache.get(term, generalize)
+            if hit is not None:
+                cached[term] = hit
+            else:
+                to_translate.append(term)
+
+        if cached:
+            logger.info(
+                "Translation cache hit for %d/%d terms (generalize=%s)",
+                len(cached),
+                len(unique),
+                generalize,
+            )
+
+        # 3. Translate misses in chunks via LLM
+        llm_results: dict[str, str] = {}
         if to_translate:
-            translated = self._translate_in_chunks(to_translate, generalize=generalize)
+            llm_results = self._translate_uncached(to_translate, generalize=generalize)
+            # Populate cache
+            for term, translation in llm_results.items():
+                self._cache.set(term, generalize, translation)
+            self._cache.save()
 
-        # Map back to original input order and casing (but use lowercase key)
+        # 4. Merge hits + LLM results
+        merged = {**cached, **llm_results}
+
+        # 5. Map back to original input order
         result: List[str] = []
         for ing in ingredients:
             key = ing.strip().lower()
-            if key in translated:
-                result.append(translated[key])
+            if key in merged:
+                result.append(merged[key])
             else:
                 # Should not happen unless LLM omitted a key; fallback to original
                 result.append(ing)
 
         t_total = time.perf_counter() - t_start
         logger.debug(
-            "translate_batch total_ingredients=%d translated=%d total_time_ms=%.2f",
+            "translate_batch total_ingredients=%d unique=%d cached=%d translated=%d total_time_ms=%.2f",
             len(ingredients),
+            len(unique),
+            len(cached),
             len(result),
             t_total * 1000,
         )
         return result
 
-    def _translate_in_chunks(
+    def _translate_uncached(
         self, ingredients: List[str], generalize: bool = True
     ) -> dict[str, str]:
         """
-        Divide ingredientes em chunks para evitar respostas truncadas
-        por max_tokens. Chunks menores = maior confiabilidade de JSON válido.
+        Send ingredients to the LLM in chunks to avoid truncation.
+        Returns a dict mapping each original term to its translation.
         """
         total = len(ingredients)
+        if total == 0:
+            return {}
+
         if total <= _MAX_CHUNK_SIZE:
             return self._call_llm(ingredients, generalize=generalize)
 

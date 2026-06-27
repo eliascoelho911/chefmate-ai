@@ -8,6 +8,10 @@ from app.utils.chat_orchestrator import ChatOrchestrator
 from app.utils.config_loader import load_config
 from app.utils.embedder import SentenceTransformerEmbedder, load_embedding_model
 from app.utils.ingredient_translator import IngredientTranslator
+from app.utils.translation_cache import (
+    FileTranslationCache,
+    InMemoryTranslationCache,
+)
 from app.utils.intent_detector import IntentDetector
 from app.utils.llm_model import LLMRunner
 from app.utils.prompt_builder import PromptBuilder
@@ -57,11 +61,26 @@ def init_dependencies():
         base_url="https://openrouter.ai/api/v1",
         api_key=config["openrouter"]["api_key"],
     )
+
+    cache_path = config["paths"].get("translation_cache_path")
+    if cache_path:
+        translation_cache: FileTranslationCache | InMemoryTranslationCache = (
+            FileTranslationCache(cache_path)
+        )
+        translation_cache.load()
+    else:
+        translation_cache = InMemoryTranslationCache()
+
     ingredient_translator = IngredientTranslator(
         client=translator_client,
         model=fast_model,
+        cache=translation_cache,
     )
-    logging.info("IngredientTranslator initialized with model=%s", fast_model)
+    logging.info(
+        "IngredientTranslator initialized with model=%s cache=%s",
+        fast_model,
+        type(translation_cache).__name__,
+    )
 
     recipe_translator = RecipeTranslator(
         client=translator_client,

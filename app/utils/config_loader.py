@@ -22,6 +22,9 @@ def load_config(config_file: str = "config.yml") -> dict:
             ),
             "faiss_index_dir": os.getenv("FAISS_INDEX_DIR", "data/indexes"),
             "sqlite_db": os.getenv("SQLITE_DB", "data/processed/recipes.db"),
+            "translation_cache_path": os.getenv(
+                "TRANSLATION_CACHE_PATH", "data/cache/translations.json"
+            ),
         },
         "embedding": {
             "model_name": os.getenv(
