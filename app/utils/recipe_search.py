@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List, Optional
 
 from app.core.intent import Intent
@@ -38,19 +39,43 @@ class RecipeSearch:
         top_k: int = 5,
         required_ingredients: Optional[List[str]] = None,
     ) -> List[Recipe]:
+        t_start = time.perf_counter()
+
+        t_intent_start = time.perf_counter()
         resolved_intent = (
             intent if intent is not None else self._intent_detector.detect(query)
         )
-        logger.debug("query='%s' intent=%s", query, resolved_intent.value)
-        embedding = self._embedder.embed(query)
-        logger.debug("embedding len=%d", len(embedding))
+        t_intent_elapsed = time.perf_counter() - t_intent_start
+        logger.debug(
+            "query='%s' intent=%s intent_detection_time_ms=%.2f",
+            query,
+            resolved_intent.value,
+            t_intent_elapsed * 1000,
+        )
 
+        t_embed_start = time.perf_counter()
+        embedding = self._embedder.embed(query)
+        t_embed_elapsed = time.perf_counter() - t_embed_start
+        logger.debug(
+            "embedding len=%d embedding_time_ms=%.2f",
+            len(embedding),
+            t_embed_elapsed * 1000,
+        )
+
+        t_retrieve_start = time.perf_counter()
         if required_ingredients:
             results = self._retriever.retrieve_with_ingredients(
                 embedding, resolved_intent, top_k, required_ingredients
             )
         else:
             results = self._retriever.retrieve(embedding, resolved_intent, top_k)
+        t_retrieve_elapsed = time.perf_counter() - t_retrieve_start
+        logger.debug(
+            "results count=%d retrieve_time_ms=%.2f",
+            len(results),
+            t_retrieve_elapsed * 1000,
+        )
 
-        logger.debug("results count=%d", len(results))
+        t_total = time.perf_counter() - t_start
+        logger.debug("search_total_time_ms=%.2f", t_total * 1000)
         return results

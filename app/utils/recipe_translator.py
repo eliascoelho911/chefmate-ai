@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
 
@@ -59,12 +60,20 @@ class RecipeTranslator:
         self._model = model
 
     def translate_recipes(self, recipes: List[Recipe]) -> List[Recipe]:
+        t_start = time.perf_counter()
         if not recipes:
             return []
 
         total = len(recipes)
         if total <= _MAX_RECIPES_PER_CHUNK:
-            return self._translate_chunk(recipes)
+            result = self._translate_chunk(recipes)
+            t_total = time.perf_counter() - t_start
+            logger.debug(
+                "translate_recipes total=%d total_time_ms=%.2f",
+                total,
+                t_total * 1000,
+            )
+            return result
 
         num_chunks = math.ceil(total / _MAX_RECIPES_PER_CHUNK)
         logger.info(
@@ -88,6 +97,13 @@ class RecipeTranslator:
                 for chunk_result in executor.map(self._translate_chunk, chunks):
                     translated.extend(chunk_result)
 
+        t_total = time.perf_counter() - t_start
+        logger.debug(
+            "translate_recipes total=%d chunks=%d total_time_ms=%.2f",
+            total,
+            num_chunks,
+            t_total * 1000,
+        )
         return translated
 
     def _translate_chunk(self, recipes: List[Recipe]) -> List[Recipe]:
@@ -116,6 +132,7 @@ class RecipeTranslator:
                 self._model,
                 max_tokens,
             )
+            t_llm_start = time.perf_counter()
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,
@@ -124,6 +141,13 @@ class RecipeTranslator:
                 top_p=0.9,
                 response_format={"type": "json_object"},
             )
+            t_llm_elapsed = time.perf_counter() - t_llm_start
+            logger.debug(
+                "recipe_translation_llm_time_ms=%.2f recipes=%d",
+                t_llm_elapsed * 1000,
+                len(recipes),
+            )
+
             choice = response.choices[0]
             content = choice.message.content or ""
 

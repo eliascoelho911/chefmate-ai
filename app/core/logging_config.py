@@ -1,6 +1,26 @@
 import logging
 import sys
 
+# Loggers de bibliotecas que ficam muito barulhentos em DEBUG
+_NOISY_LOGGERS = [
+    "httpcore",
+    "httpcore.http11",
+    "httpcore.connection",
+    "httpx",
+    "urllib3",
+    "urllib3.connectionpool",
+    "openai._base_client",
+    "sentence_transformers",
+    "transformers",
+    "transformers.modeling_utils",
+    "transformers.configuration_utils",
+]
+
+
+def _silence_noisy_loggers() -> None:
+    for name in _NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
 
 def setup_logging(level: str = "INFO") -> None:
     """
@@ -25,3 +45,6 @@ def setup_logging(level: str = "INFO") -> None:
         root.addHandler(handler)
     else:
         root.handlers[0] = handler
+
+    # Silence noisy HTTP library loggers while keeping app debug logs
+    _silence_noisy_loggers()

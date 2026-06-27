@@ -1,4 +1,5 @@
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader
@@ -41,7 +42,10 @@ class SuggestByIngredientsResponse(BaseModel):
 def search_recipes(
     request: SearchRequest, container: AppContainer = Depends(get_container)
 ):
+    t_start = time.perf_counter()
     results = container.recipe_search.search(request.query, top_k=request.top_k)
+    t_total = time.perf_counter() - t_start
+    logger.debug("search_endpoint total_time_ms=%.2f", t_total * 1000)
     return SearchResponse(results=results)
 
 
@@ -50,6 +54,8 @@ def suggest_by_ingredients(
     request: SuggestByIngredientsRequest,
     container: AppContainer = Depends(get_container),
 ):
+    t_start = time.perf_counter()
+
     parts = []
     if request.proteinas:
         parts.append(", ".join(request.proteinas))
@@ -69,22 +75,44 @@ def suggest_by_ingredients(
     if request.legumes:
         required.extend(request.legumes)
 
+    t_ingredient_translation_start = time.perf_counter()
     try:
         translated = container.ingredient_translator.translate_batch(required)
     except TranslationError as exc:
         logger.warning("Ingredient translation failed, using original terms: %s", exc)
         translated = required
+    t_ingredient_translation_elapsed = (
+        time.perf_counter() - t_ingredient_translation_start
+    )
+    logger.debug(
+        "ingredient_translation_time_ms=%.2f",
+        t_ingredient_translation_elapsed * 1000,
+    )
 
+    t_search_start = time.perf_counter()
     results = container.recipe_search.search(
         query,
         intent=Intent.INGREDIENT_SEARCH,
         top_k=request.top_k,
         required_ingredients=translated,
     )
+    t_search_elapsed = time.perf_counter() - t_search_start
+    logger.debug("recipe_search_time_ms=%.2f", t_search_elapsed * 1000)
 
+    t_recipe_translation_start = time.perf_counter()
     try:
         results = container.recipe_translator.translate_recipes(results)
     except RecipeTranslationError as exc:
         logger.warning("Recipe translation failed, returning English recipes: %s", exc)
+    t_recipe_translation_elapsed = time.perf_counter() - t_recipe_translation_start
+    logger.debug(
+        "recipe_translation_time_ms=%.2f",
+        t_recipe_translation_elapsed * 1000,
+    )
 
+    t_total = time.perf_counter() - t_start
+    logger.debug(
+        "suggest_by_ingredients_endpoint total_time_ms=%.2f",
+        t_total * 1000,
+    )
     return SuggestByIngredientsResponse(results=results)

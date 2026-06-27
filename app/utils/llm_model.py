@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 from typing import Optional
 
 from openai import OpenAI
@@ -58,6 +59,7 @@ class LLMRunner:
         try:
             logger.info("Generating full response via OpenRouter...")
             messages = self._truncate_messages(messages)
+            t_llm_start = time.perf_counter()
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
@@ -65,6 +67,8 @@ class LLMRunner:
                 temperature=0.7,
                 top_p=0.9,
             )
+            t_llm_elapsed = time.perf_counter() - t_llm_start
+            logger.debug("generate_response llm_time_ms=%.2f", t_llm_elapsed * 1000)
             content = response.choices[0].message.content
             return content.strip() if content else ""
         except Exception as e:
@@ -75,6 +79,7 @@ class LLMRunner:
             logger.info("Streaming response via OpenRouter...")
             messages = self._truncate_messages(messages)
             buffer = ""
+            t_llm_start = time.perf_counter()
             stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
@@ -97,6 +102,9 @@ class LLMRunner:
 
             if buffer.strip():
                 yield self._clean_streamed_text(buffer)
+
+            t_llm_elapsed = time.perf_counter() - t_llm_start
+            logger.debug("stream_response llm_time_ms=%.2f", t_llm_elapsed * 1000)
 
         except Exception as e:
             yield f"\n[Error generating response: {str(e)}]"

@@ -62,11 +62,12 @@ class VectorIndex:
 
         query_vector = np.array([embedding]).astype("float32")
         distances, indices = index.search(query_vector, top_k)
+        valid_count = int(np.sum(indices[0] != -1))
         logger.debug(
-            "index=%s distances=%s indices=%s",
+            "index=%s top_k=%d valid_results=%d",
             index_name,
-            distances[0].tolist(),
-            indices[0].tolist(),
+            top_k,
+            valid_count,
         )
         return distances, indices
 

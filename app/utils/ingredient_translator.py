@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import re
+import time
 from typing import List, Optional
 
 from openai import OpenAI
@@ -55,6 +56,7 @@ class IngredientTranslator:
         self._model = model
 
     def translate_batch(self, ingredients: List[str]) -> List[str]:
+        t_start = time.perf_counter()
         if not ingredients:
             return []
 
@@ -81,6 +83,14 @@ class IngredientTranslator:
             else:
                 # Should not happen unless LLM omitted a key; fallback to original
                 result.append(ing)
+
+        t_total = time.perf_counter() - t_start
+        logger.debug(
+            "translate_batch total_ingredients=%d translated=%d total_time_ms=%.2f",
+            len(ingredients),
+            len(result),
+            t_total * 1000,
+        )
         return result
 
     def _translate_in_chunks(self, ingredients: List[str]) -> dict[str, str]:
@@ -138,6 +148,7 @@ class IngredientTranslator:
                 self._model,
                 max_tokens,
             )
+            t_llm_start = time.perf_counter()
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,
@@ -146,6 +157,13 @@ class IngredientTranslator:
                 top_p=0.9,
                 response_format={"type": "json_object"},
             )
+            t_llm_elapsed = time.perf_counter() - t_llm_start
+            logger.debug(
+                "ingredient_translation_llm_time_ms=%.2f items=%d",
+                t_llm_elapsed * 1000,
+                len(ingredients),
+            )
+
             choice = response.choices[0]
             content = choice.message.content or ""
 
