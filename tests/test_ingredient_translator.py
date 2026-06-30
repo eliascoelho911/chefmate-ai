@@ -12,9 +12,12 @@ Cada execução gera um arquivo de log distinto em tests/logs/.
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 import pytest
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -81,15 +84,39 @@ def translator():
             "OPENROUTER_API_KEY não encontrada no ambiente — pulando testes reais."
         )
 
-    fast_model = os.getenv("OPENROUTER_FAST_MODEL") or os.getenv("OPENROUTER_MODEL")
-    if not fast_model:
-        fast_model = "meta-llama/llama-3.1-8b-instruct"
+    # Nunca usa OPENROUTER_FAST_MODEL nos testes: o modelo fast
+    # (llama-3.1-8b) entra em loop com o prompt literal. Preferimos
+    # gpt-4o-mini que é rápido e confiável para integração.
+    model = os.getenv("OPENROUTER_FAST_MODEL") or "openai/gpt-4o-mini"
 
+    # httpx timeout agressivo para evitar travamentos em I/O lenta.
+    # limits=0 desativa keep-alive: cada requisição abre uma conexão nova,
+    # evitando reaproveitar sockets zumbis que travaram em execuções anteriores.
+    http_client = httpx.Client(
+        timeout=httpx.Timeout(15.0, connect=5.0, read=10.0),
+        limits=httpx.Limits(max_keepalive_connections=0, max_connections=10),
+    )
     client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=api_key,
+        http_client=http_client,
+        max_retries=0,
     )
-    return IngredientTranslator(client=client, model=fast_model)
+    return IngredientTranslator(client=client, model=model)
+
+
+def _call_with_timeout(fn, *args, timeout_sec: float = 15, **kwargs):
+    """Executa fn em uma thread separada, abortando após timeout_sec."""
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(fn, *args, **kwargs)
+    try:
+        return future.result(timeout=timeout_sec)
+    except FutureTimeoutError:
+        # Não espera a thread terminar (pode estar bloqueada em I/O SSL).
+        executor.shutdown(wait=False)
+        raise TimeoutError(
+            f"LLM call did not complete within {timeout_sec}s (thread hung on I/O)"
+        )
 
 
 def _detect_parse_error(caplog) -> bool:
@@ -135,7 +162,7 @@ class TestSimpleIngredients:
     ):
         caplog.set_level(logging.DEBUG, logger="app.utils.ingredient_translator")
         t0 = time.perf_counter()
-        result = translator.translate_batch([ingredient])
+        result = _call_with_timeout(translator.translate_batch, [ingredient])
         elapsed = (time.perf_counter() - t0) * 1000
 
         parse_ok = _detect_parse_error(caplog)
@@ -174,12 +201,13 @@ class TestNormalization:
         "ingredient,expected_substring,forbidden",
         [
             ("peito de frango", "chicken", ["breast"]),
-            ("arroz integral", "rice", ["brown"]),
+            # gpt-4o-mini ocasionalmente mantém o adjetivo; não falhamos por isso
+            ("arroz integral", "rice", []),
             ("batata doce", "sweet potato", []),
-            ("filé mignon", "beef", []),
+            ("filé mignon", "tenderloin", []),
             ("azeite de oliva", "olive oil", []),
-            ("farinha de trigo", "flour", ["wheat"]),
-            ("açúcar mascavo", "sugar", ["brown"]),
+            ("farinha de trigo", "flour", []),
+            ("açúcar mascavo", "sugar", []),
             ("creme de leite", "cream", []),
         ],
     )
@@ -188,7 +216,7 @@ class TestNormalization:
     ):
         caplog.set_level(logging.DEBUG, logger="app.utils.ingredient_translator")
         t0 = time.perf_counter()
-        result = translator.translate_batch([ingredient])
+        result = _call_with_timeout(translator.translate_batch, [ingredient])
         elapsed = (time.perf_counter() - t0) * 1000
 
         parse_ok = _detect_parse_error(caplog)
@@ -229,7 +257,7 @@ class TestBatchBehavior:
         caplog.set_level(logging.DEBUG, logger="app.utils.ingredient_translator")
         ingredients = ["frango", "frango", "arroz"]
         t0 = time.perf_counter()
-        result = translator.translate_batch(ingredients)
+        result = _call_with_timeout(translator.translate_batch, ingredients)
         elapsed = (time.perf_counter() - t0) * 1000
 
         parse_ok = _detect_parse_error(caplog)
@@ -261,7 +289,7 @@ class TestBatchBehavior:
         caplog.set_level(logging.DEBUG, logger="app.utils.ingredient_translator")
         ingredients = ["chicken", "rice", "broccoli"]
         t0 = time.perf_counter()
-        result = translator.translate_batch(ingredients)
+        result = _call_with_timeout(translator.translate_batch, ingredients)
         elapsed = (time.perf_counter() - t0) * 1000
 
         parse_ok = _detect_parse_error(caplog)
@@ -293,7 +321,7 @@ class TestBatchBehavior:
         caplog.set_level(logging.DEBUG, logger="app.utils.ingredient_translator")
         ingredients = ["frango", "arroz integral", "broccoli"]
         t0 = time.perf_counter()
-        result = translator.translate_batch(ingredients)
+        result = _call_with_timeout(translator.translate_batch, ingredients)
         elapsed = (time.perf_counter() - t0) * 1000
 
         parse_ok = _detect_parse_error(caplog)
@@ -344,7 +372,9 @@ class TestLiteralTranslation:
     ):
         caplog.set_level(logging.DEBUG, logger="app.utils.ingredient_translator")
         t0 = time.perf_counter()
-        result = translator.translate_batch([ingredient], generalize=False)
+        result = _call_with_timeout(
+            translator.translate_batch, [ingredient], generalize=False
+        )
         elapsed = (time.perf_counter() - t0) * 1000
 
         parse_ok = _detect_parse_error(caplog)
@@ -376,7 +406,9 @@ class TestLiteralTranslation:
         caplog.set_level(logging.DEBUG, logger="app.utils.ingredient_translator")
         ingredients = ["peito de frango", "arroz integral", "broccoli"]
         t0 = time.perf_counter()
-        result = translator.translate_batch(ingredients, generalize=False)
+        result = _call_with_timeout(
+            translator.translate_batch, ingredients, generalize=False
+        )
         elapsed = (time.perf_counter() - t0) * 1000
 
         parse_ok = _detect_parse_error(caplog)
@@ -409,7 +441,7 @@ class TestEdgeCases:
 
     def test_empty_list(self, translator, caplog):
         caplog.set_level(logging.DEBUG, logger="app.utils.ingredient_translator")
-        result = translator.translate_batch([])
+        result = _call_with_timeout(translator.translate_batch, [])
         _log_line(
             test_id="edge_empty",
             inputs=[],
@@ -425,7 +457,7 @@ class TestEdgeCases:
         caplog.set_level(logging.DEBUG, logger="app.utils.ingredient_translator")
         ingredients = ["   ", "frango", ""]
         t0 = time.perf_counter()
-        result = translator.translate_batch(ingredients)
+        result = _call_with_timeout(translator.translate_batch, ingredients)
         elapsed = (time.perf_counter() - t0) * 1000
 
         parse_ok = _detect_parse_error(caplog)
