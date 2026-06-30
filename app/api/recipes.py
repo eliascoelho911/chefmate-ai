@@ -26,11 +26,15 @@ class QueryItem(BaseModel):
 class SearchRequest(BaseModel):
     intent: Intent
     query: List[QueryItem]
-    top_k: int = 5
+    page: int = 1
+    per_page: int = 10
 
 
 class SearchResponse(BaseModel):
     results: List[Recipe]
+    page: int
+    per_page: int
+    has_more: bool
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -43,6 +47,11 @@ def search_recipes(
             detail=f"Unsupported intent: {request.intent.value}. Only 'ingredient_search' is supported.",
         )
 
+    if request.page < 1:
+        raise HTTPException(status_code=400, detail="page must be >= 1")
+    if not (1 <= request.per_page <= 10):
+        raise HTTPException(status_code=400, detail="per_page must be between 1 and 10")
+
     t_start = time.perf_counter()
 
     items = [
@@ -50,12 +59,25 @@ def search_recipes(
         for item in request.query
     ]
 
-    results = container.ingredient_search_service.search(
+    # Fetch one extra result to determine has_more accurately.
+    top_k = request.page * request.per_page + 1
+
+    all_results = container.ingredient_search_service.search(
         items=items,
         intent=request.intent,
-        top_k=request.top_k,
+        top_k=top_k,
     )
+
+    has_more = len(all_results) > request.page * request.per_page
+    results = all_results[
+        (request.page - 1) * request.per_page : request.page * request.per_page
+    ]
 
     t_total = time.perf_counter() - t_start
     logger.debug("search_endpoint total_time_ms=%.2f", t_total * 1000)
-    return SearchResponse(results=results)
+    return SearchResponse(
+        results=results,
+        page=request.page,
+        per_page=request.per_page,
+        has_more=has_more,
+    )
