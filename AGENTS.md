@@ -142,7 +142,9 @@ If any step fails, the app will not start.
 The app is fully dockerized. See the `Dockerfile`, `docker-compose.yml`, and `entrypoint.sh` in the repo root.
 
 ### Key container behavior
-- The container runs as a non-root user (`appuser`, UID 1001).
+- The container image creates a non-root user (`appuser`, UID 1001).
+- **On boot**, the container starts as **root** so that `entrypoint.sh` can create directories inside the Docker volume (e.g. `data/cache`) and `chown` them to `appuser`. Immediately after fixing permissions, it drops to `appuser` via `gosu` before starting Uvicorn.
+- `entrypoint.sh` is **root-owned** (`chmod 755`) so `appuser` cannot tamper with it. This prevents a compromised app process from modifying the entrypoint and escalating privileges on the next restart.
 - On boot, `entrypoint.sh` checks for the cleaned recipe pickle and FAISS indexes.
   - If missing, the container **exits with an error** — it does NOT run data preparation automatically.
   - If present, it starts Uvicorn immediately.

@@ -30,6 +30,7 @@ FROM python:3.11-slim AS production
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user/group and ensure home directory exists with correct permissions
@@ -53,12 +54,14 @@ ENV HF_HOME=/home/appuser/.cache/huggingface
 # Copy application source code
 COPY --chown=appuser:appgroup . .
 
-# Copy and prepare entrypoint script
-COPY --chown=appuser:appgroup entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Copy and prepare entrypoint script (must be root-owned so appuser cannot tamper with it)
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
 
 # Switch to non-root user
-USER appuser
+# NOTE: We no longer hardcode USER here because entrypoint.sh needs to run
+# as root initially to fix volume permissions, then drops to appuser via gosu.
+# USER appuser
 
 # Expose FastAPI port
 EXPOSE 8000
