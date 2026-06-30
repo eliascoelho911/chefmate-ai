@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from app.core.models import Recipe
-from app.utils.recipe_translator import RecipeTranslator
+from app.utils.recipe_translator import InMemoryRecipeCache, RecipeTranslator
 
 # ---------------------------------------------------------------------------
 # Setup de logging por execução
@@ -148,6 +148,31 @@ def recipe_translator():
     return RecipeTranslator(client=client, model=model)
 
 
+@pytest.fixture(scope="module")
+def recipe_translator_with_cache():
+    """Instancia RecipeTranslator com cache explícito para testes de cache."""
+    load_dotenv()
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        pytest.skip(
+            "OPENROUTER_API_KEY não encontrada no ambiente — pulando testes reais."
+        )
+
+    model = os.getenv("OPENROUTER_FAST_MODEL") or "openai/gpt-4o-mini"
+
+    http_client = httpx.Client(
+        timeout=httpx.Timeout(20.0, connect=5.0, read=15.0),
+        limits=httpx.Limits(max_keepalive_connections=0, max_connections=10),
+    )
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+        http_client=http_client,
+        max_retries=0,
+    )
+    return RecipeTranslator(client=client, model=model, cache=InMemoryRecipeCache())
+
+
 def _call_with_timeout(fn, *args, timeout_sec: float = 20, **kwargs):
     """Executa fn em uma thread separada, abortando após timeout_sec."""
     executor = ThreadPoolExecutor(max_workers=1)
@@ -175,6 +200,21 @@ def _detect_parse_error(caplog) -> bool:
                 if msg in record.getMessage():
                     return False
     return True
+
+
+def _recipe_was_translated(original: Recipe, translated: Recipe) -> bool:
+    """Retorna True se pelo menos um campo traduzível foi alterado."""
+    if translated.name != original.name:
+        return True
+    if translated.category != original.category:
+        return True
+    if translated.ingredients_cleaned != original.ingredients_cleaned:
+        return True
+    if translated.ingredients_with_quantities != original.ingredients_with_quantities:
+        return True
+    if translated.recipe_instructions != original.recipe_instructions:
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -322,6 +362,213 @@ class TestMultipleRecipes:
                 ],
                 elapsed_ms=elapsed,
                 parse_ok=parse_ok,
+                valid=valid,
+                notes=notes,
+            )
+
+
+class TestFiveRecipesChunk:
+    """Tradução de 5 receitas em um único chunk (_MAX_RECIPES_PER_CHUNK = 5)."""
+
+    def test_five_recipes_chunk(self, recipe_translator, caplog):
+        caplog.set_level(logging.DEBUG, logger="app.utils.recipe_translator")
+        recipes = [
+            _make_recipe(name="Grilled Chicken", category="Main Dish"),
+            _make_recipe(
+                name="Chocolate Cake",
+                ingredients_cleaned=["flour", "sugar", "cocoa powder"],
+                ingredients_with_quantities=[
+                    "2 cups flour",
+                    "1 cup sugar",
+                    "3 tbsp cocoa powder",
+                ],
+                recipe_instructions=[
+                    "Preheat oven to 180C.",
+                    "Mix dry ingredients.",
+                    "Bake for 30 minutes.",
+                ],
+                category="Dessert",
+            ),
+            _make_recipe(
+                name="Tomato Soup",
+                ingredients_cleaned=["tomato", "onion", "basil"],
+                ingredients_with_quantities=[
+                    "4 tomatoes",
+                    "1 onion",
+                    "5 leaves basil",
+                ],
+                recipe_instructions=[
+                    "Chop tomatoes and onion.",
+                    "Simmer in pot for 20 minutes.",
+                    "Blend until smooth.",
+                ],
+                category="Soup",
+            ),
+            _make_recipe(
+                name="Beef Steak",
+                ingredients_cleaned=["beef steak", "garlic", "butter"],
+                ingredients_with_quantities=[
+                    "2 beef steaks",
+                    "3 cloves garlic",
+                    "2 tbsp butter",
+                ],
+                recipe_instructions=[
+                    "Season steaks with salt and pepper.",
+                    "Sear in hot pan 3 minutes per side.",
+                    "Add butter and garlic, baste for 1 minute.",
+                ],
+                category="Main Dish",
+            ),
+            _make_recipe(
+                name="Vegetable Salad",
+                ingredients_cleaned=["lettuce", "cucumber", "tomato"],
+                ingredients_with_quantities=[
+                    "1 head lettuce",
+                    "1 cucumber",
+                    "2 tomatoes",
+                ],
+                recipe_instructions=[
+                    "Wash and chop vegetables.",
+                    "Toss in large bowl.",
+                    "Drizzle with olive oil and vinegar.",
+                ],
+                category="Salad",
+            ),
+        ]
+
+        t0 = time.perf_counter()
+        result = _call_with_timeout(
+            recipe_translator.translate_recipes, recipes, timeout_sec=30
+        )
+        elapsed = (time.perf_counter() - t0) * 1000
+
+        parse_ok = _detect_parse_error(caplog)
+        valid = False
+        notes = ""
+
+        try:
+            assert len(result) == 5, f"Esperava 5 receitas, obteve {len(result)}"
+
+            translated_count = sum(
+                1
+                for orig, tr in zip(recipes, result)
+                if _recipe_was_translated(orig, tr)
+            )
+            # Pelo menos 3 das 5 devem ter sido traduzidas (tolerância ao modelo)
+            assert translated_count >= 3, (
+                f"Apenas {translated_count}/5 receitas parecem traduzidas. "
+                f"Nomes: {[tr.name for tr in result]}"
+            )
+            valid = True
+        except AssertionError as exc:
+            notes = str(exc)
+            raise
+        finally:
+            _log_line(
+                test_id="five_chunk",
+                inputs=[r.name for r in recipes],
+                outputs=[tr.name for tr in result],
+                elapsed_ms=elapsed,
+                parse_ok=parse_ok,
+                valid=valid,
+                notes=notes,
+            )
+
+
+class TestCache:
+    """Testes de comportamento do cache de tradução."""
+
+    def test_cache_hit(self, recipe_translator_with_cache, caplog):
+        caplog.set_level(logging.DEBUG, logger="app.utils.recipe_translator")
+        recipes = [
+            _make_recipe(name="Grilled Chicken"),
+            _make_recipe(
+                name="Chocolate Cake",
+                ingredients_cleaned=["flour", "sugar", "cocoa powder"],
+                ingredients_with_quantities=[
+                    "2 cups flour",
+                    "1 cup sugar",
+                    "3 tbsp cocoa powder",
+                ],
+                recipe_instructions=[
+                    "Preheat oven to 180C.",
+                    "Mix dry ingredients.",
+                    "Bake for 30 minutes.",
+                ],
+                category="Dessert",
+            ),
+        ]
+
+        # Primeira chamada: deve acionar a LLM
+        t0 = time.perf_counter()
+        result1 = _call_with_timeout(
+            recipe_translator_with_cache.translate_recipes, recipes, timeout_sec=30
+        )
+        elapsed1 = (time.perf_counter() - t0) * 1000
+
+        parse_ok1 = _detect_parse_error(caplog)
+        assert len(result1) == 2
+
+        # Limpa os logs de caplog para distinguir chamada 1 de chamada 2
+        caplog.clear()
+
+        # Segunda chamada: deve ser cache hit
+        t0 = time.perf_counter()
+        result2 = _call_with_timeout(
+            recipe_translator_with_cache.translate_recipes, recipes, timeout_sec=30
+        )
+        elapsed2 = (time.perf_counter() - t0) * 1000
+
+        parse_ok2 = _detect_parse_error(caplog)
+        valid = False
+        notes = ""
+
+        try:
+            assert len(result2) == 2
+            # Resultados devem ser idênticos
+            for i, (r1, r2) in enumerate(zip(result1, result2)):
+                assert r1.name == r2.name, (
+                    f"Nome diferente no índice {i}: '{r1.name}' vs '{r2.name}'"
+                )
+                assert r1.category == r2.category, f"Categoria diferente no índice {i}"
+                assert r1.ingredients_cleaned == r2.ingredients_cleaned, (
+                    f"Ingredientes diferem no índice {i}"
+                )
+                assert (
+                    r1.ingredients_with_quantities == r2.ingredients_with_quantities
+                ), f"Quantidades diferem no índice {i}"
+                assert r1.recipe_instructions == r2.recipe_instructions, (
+                    f"Instruções diferem no índice {i}"
+                )
+
+            # A segunda chamada deve ser bem mais rápida (cache hit)
+            assert elapsed2 < elapsed1 * 0.5, (
+                f"Segunda chamada não foi significativamente mais rápida: "
+                f"primeira={elapsed1:.0f}ms, segunda={elapsed2:.0f}ms"
+            )
+
+            # Não deve haver log de chamada LLM na segunda execução
+            llm_logs = [
+                r
+                for r in caplog.get_records("call")
+                if "Translating" in r.getMessage()
+                and "recipes via OpenRouter" in r.getMessage()
+            ]
+            assert not llm_logs, (
+                "Esperava cache hit, mas houve chamada LLM na segunda execução"
+            )
+
+            valid = True
+        except AssertionError as exc:
+            notes = str(exc)
+            raise
+        finally:
+            _log_line(
+                test_id="cache_hit",
+                inputs=[r.name for r in recipes],
+                outputs=[r.name for r in result2],
+                elapsed_ms=elapsed2,
+                parse_ok=parse_ok2,
                 valid=valid,
                 notes=notes,
             )

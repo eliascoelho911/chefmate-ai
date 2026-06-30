@@ -19,7 +19,7 @@ from app.utils.recipe_repository import RecipeRepository
 from app.utils.recipe_retriever import FAISSRecipeRetriever
 from app.utils.ingredient_search_service import IngredientSearchService
 from app.utils.recipe_search import RecipeSearch
-from app.utils.recipe_translator import RecipeTranslator
+from app.utils.recipe_translator import InMemoryRecipeCache, RecipeTranslator
 from app.utils.sqlite_store import RecipeSQLiteStore
 from app.utils.vector_index import VectorIndex
 
@@ -85,6 +85,7 @@ def init_dependencies():
     recipe_translator = RecipeTranslator(
         client=translator_client,
         model=fast_model,
+        cache=InMemoryRecipeCache(),
     )
     logging.info("RecipeTranslator initialized with model=%s", fast_model)
 
